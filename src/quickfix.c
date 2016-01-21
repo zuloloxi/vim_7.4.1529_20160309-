@@ -162,9 +162,6 @@ qf_init(wp, efile, errorformat, newlist, qf_title)
 {
     qf_info_T	    *qi = &ql_info;
 
-    if (efile == NULL)
-	return FAIL;
-
     if (wp != NULL)
     {
 	qi = ll_get_or_alloc_list(wp);
@@ -253,9 +250,9 @@ qf_init_ext(qi, efile, buf, tv, errorformat, newlist, lnumfirst, lnumlast,
 			{'s', ".\\+"}
 		    };
 
-    namebuf = alloc(CMDBUFFSIZE + 1);
-    errmsg = alloc(CMDBUFFSIZE + 1);
-    pattern = alloc(CMDBUFFSIZE + 1);
+    namebuf = alloc_id(CMDBUFFSIZE + 1, aid_qf_namebuf);
+    errmsg = alloc_id(CMDBUFFSIZE + 1, aid_qf_errmsg);
+    pattern = alloc_id(CMDBUFFSIZE + 1, aid_qf_pattern);
     if (namebuf == NULL || errmsg == NULL || pattern == NULL)
 	goto qf_init_end;
 
@@ -3465,10 +3462,13 @@ ex_vimgrep(eap)
 	goto theend;
     }
 
-    dirname_start = alloc(MAXPATHL);
-    dirname_now = alloc(MAXPATHL);
+    dirname_start = alloc_id(MAXPATHL, aid_qf_dirname_start);
+    dirname_now = alloc_id(MAXPATHL, aid_qf_dirname_now);
     if (dirname_start == NULL || dirname_now == NULL)
+    {
+	FreeWild(fcount, fnames);
 	goto theend;
+    }
 
     /* Remember the current directory, because a BufRead autocommand that does
      * ":lcd %:p:h" changes the meaning of short path names. */
@@ -4230,7 +4230,10 @@ ex_cexpr(eap)
 	if ((tv->v_type == VAR_STRING && tv->vval.v_string != NULL)
 		|| (tv->v_type == VAR_LIST && tv->vval.v_list != NULL))
 	{
-	    if (qf_init_ext(qi, NULL, NULL, tv, p_efm,
+	    char_u *efm = *curwin->w_buffer->b_p_efm == NUL ? p_efm
+						  : curwin->w_buffer->b_p_efm;
+
+	    if (qf_init_ext(qi, NULL, NULL, tv, efm,
 			    (eap->cmdidx != CMD_caddexpr
 			     && eap->cmdidx != CMD_laddexpr),
 				 (linenr_T)0, (linenr_T)0, *eap->cmdlinep) > 0

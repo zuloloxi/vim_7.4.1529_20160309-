@@ -1661,7 +1661,7 @@ gui_mch_init(void)
 	    return FAIL;
     }
     s_textArea = CreateWindowEx(
-	WS_EX_CLIENTEDGE,
+	0,
 	szTextAreaClass, "Vim text area",
 	WS_CHILD | WS_VISIBLE, 0, 0,
 	100,				/* Any value will do for now */
@@ -1716,9 +1716,9 @@ gui_mch_init(void)
     highlight_gui_started();
 
     /*
-     * Start out by adding the configured border width into the border offset
+     * Start out by adding the configured border width into the border offset.
      */
-    gui.border_offset = gui.border_width + 2;	/*CLIENT EDGE*/
+    gui.border_offset = gui.border_width;
 
     /*
      * Set up for Intellimouse processing
@@ -1769,9 +1769,11 @@ gui_mch_init(void)
 #endif
 
 #ifdef FEAT_EVAL
-# ifndef HandleToLong
-/* HandleToLong() only exists in compilers that can do 64 bit builds */
-#  define HandleToLong(h) ((long)(h))
+# if !defined(_MSC_VER) || (_MSC_VER < 1400)
+/* Define HandleToLong for old MS and non-MS compilers if not defined. */
+#  ifndef HandleToLong
+#   define HandleToLong(h) ((long)(h))
+#  endif
 # endif
     /* set the v:windowid variable */
     set_vim_var_nr(VV_WINDOWID, HandleToLong(s_hwnd));

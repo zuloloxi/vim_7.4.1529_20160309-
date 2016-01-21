@@ -476,16 +476,18 @@ AlwaysNone(PyObject *self UNUSED)
 AlwaysFalse(PyObject *self UNUSED)
 {
     /* do nothing */
-    Py_INCREF(Py_False);
-    return Py_False;
+    PyObject	*ret = Py_False;
+    Py_INCREF(ret);
+    return ret;
 }
 
     static PyObject *
 AlwaysTrue(PyObject *self UNUSED)
 {
     /* do nothing */
-    Py_INCREF(Py_True);
-    return Py_True;
+    PyObject	*ret = Py_True;
+    Py_INCREF(ret);
+    return ret;
 }
 
 /***************/
@@ -5519,7 +5521,7 @@ run_eval(const char *cmd, typval_T *rettv
     }
     else
     {
-	if (ConvertFromPyObject(run_ret, rettv) == -1)
+	if (run_ret != Py_None && ConvertFromPyObject(run_ret, rettv) == -1)
 	    EMSG(_("E859: Failed to convert returned python object to vim value"));
 	Py_DECREF(run_ret);
     }

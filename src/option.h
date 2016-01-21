@@ -213,7 +213,8 @@
 #define SHM_ATTENTION	'A'		/* no ATTENTION messages */
 #define SHM_INTRO	'I'		/* intro messages */
 #define SHM_COMPLETIONMENU  'c'		/* completion menu messages */
-#define SHM_ALL		"rmfixlnwaWtToOsAIc" /* all possible flags for 'shm' */
+#define SHM_RECORDING	'q'		/* short recording message */
+#define SHM_ALL		"rmfixlnwaWtToOsAIcq" /* all possible flags for 'shm' */
 
 /* characters for p_go: */
 #define GO_ASEL		'a'		/* autoselect */
@@ -626,7 +627,7 @@ EXTERN char_u	*p_lcs;		/* 'listchars' */
 
 EXTERN int	p_lz;		/* 'lazyredraw' */
 EXTERN int	p_lpl;		/* 'loadplugins' */
-#if defined(DYNAMIC_LUA) && !defined(WIN3264)
+#if defined(DYNAMIC_LUA)
 EXTERN char_u	*p_luadll;	/* 'luadll' */
 #endif
 #ifdef FEAT_GUI_MAC
@@ -670,7 +671,7 @@ EXTERN int	p_more;		/* 'more' */
 #ifdef FEAT_MZSCHEME
 EXTERN long	p_mzq;		/* 'mzquantum */
 #endif
-#if defined(MSDOS) || defined(MSWIN) || defined(OS2)
+#if defined(MSDOS) || defined(MSWIN)
 EXTERN int	p_odev;		/* 'opendevice' */
 #endif
 EXTERN char_u	*p_opfunc;	/* 'operatorfunc' */
@@ -685,13 +686,13 @@ EXTERN char_u	*p_path;	/* 'path' */
 #ifdef FEAT_SEARCHPATH
 EXTERN char_u	*p_cdpath;	/* 'cdpath' */
 #endif
-#if defined(DYNAMIC_PERL) && !defined(WIN3264)
+#if defined(DYNAMIC_PERL)
 EXTERN char_u	*p_perldll;	/* 'perldll' */
 #endif
-#if defined(DYNAMIC_PYTHON3) && !defined(WIN3264)
-EXTERN char_u	*p_py3dll;	/* 'python3dll' */
+#if defined(DYNAMIC_PYTHON3)
+EXTERN char_u	*p_py3dll;	/* 'pythonthreedll' */
 #endif
-#if defined(DYNAMIC_PYTHON) && !defined(WIN3264)
+#if defined(DYNAMIC_PYTHON)
 EXTERN char_u	*p_pydll;	/* 'pythondll' */
 #endif
 #ifdef FEAT_RELTIME
@@ -713,7 +714,7 @@ EXTERN int	p_rs;		/* 'restorescreen' */
 EXTERN int	p_ari;		/* 'allowrevins' */
 EXTERN int	p_ri;		/* 'revins' */
 #endif
-#if defined(DYNAMIC_RUBY) && !defined(WIN3264)
+#if defined(DYNAMIC_RUBY)
 EXTERN char_u	*p_rubydll;	/* 'rubydll' */
 #endif
 #ifdef FEAT_CMDL_INFO
@@ -819,10 +820,21 @@ static char *(p_swb_values[]) = {"useopen", "usetab", "split", "newtab", "vsplit
 #define SWB_NEWTAB		0x008
 #define SWB_VSPLIT		0x010
 EXTERN int	p_tbs;		/* 'tagbsearch' */
+EXTERN char_u	*p_tc;		/* 'tagcase' */
+EXTERN unsigned tc_flags;       /* flags from 'tagcase' */
+#ifdef IN_OPTION_C
+static char *(p_tc_values[]) = {"followic", "ignore", "match", NULL};
+#endif
+#define TC_FOLLOWIC		0x01
+#define TC_IGNORE		0x02
+#define TC_MATCH		0x04
 EXTERN long	p_tl;		/* 'taglength' */
 EXTERN int	p_tr;		/* 'tagrelative' */
 EXTERN char_u	*p_tags;	/* 'tags' */
 EXTERN int	p_tgst;		/* 'tagstack' */
+#if defined(DYNAMIC_TCL)
+EXTERN char_u	*p_tcldll;	/* 'tcldll' */
+#endif
 #ifdef FEAT_ARABIC
 EXTERN int	p_tbidi;	/* 'termbidi' */
 #endif
@@ -1080,6 +1092,7 @@ enum
     , BV_SW
     , BV_SWF
     , BV_TAGS
+    , BV_TC
     , BV_TS
     , BV_TW
     , BV_TX

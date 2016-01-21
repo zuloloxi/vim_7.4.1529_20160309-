@@ -1008,6 +1008,7 @@ typedef struct
 #ifdef FEAT_MBYTE
     vimconv_T	vir_conv;	/* encoding conversion */
 #endif
+    garray_T	vir_barlines;	/* lines starting with | */
 } vir_T;
 
 #define CONV_NONE		0
@@ -1361,6 +1362,8 @@ typedef struct {
 #if !defined(FEAT_SYN_HL) && !defined(FEAT_SPELL)
     int		dummy;
 #endif
+    char_u	b_syn_chartab[32];	/* syntax iskeyword option */
+    char_u	*b_syn_isk;		/* iskeyword option */
 } synblock_T;
 
 
@@ -1674,6 +1677,8 @@ struct file_buffer
     char_u	*b_p_path;	/* 'path' local value */
     int		b_p_ar;		/* 'autoread' local value */
     char_u	*b_p_tags;	/* 'tags' local value */
+    char_u	*b_p_tc;	/* 'tagcase' local value */
+    unsigned	b_tc_flags;     /* flags for 'tagcase' */
 #ifdef FEAT_INS_EXPAND
     char_u	*b_p_dict;	/* 'dictionary' local value */
     char_u	*b_p_tsr;	/* 'thesaurus' local value */
@@ -2063,7 +2068,7 @@ struct window_S
 				       current virtual column */
 
     /*
-     * the next six are used to update the visual part
+     * the next seven are used to update the visual part
      */
     char	w_old_visual_mode;  /* last known VIsual_mode */
     linenr_T	w_old_cursor_lnum;  /* last known end of visual part */

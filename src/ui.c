@@ -1723,8 +1723,17 @@ push_raw_key(s, len)
     char_u  *s;
     int	    len;
 {
+    char_u *tmpbuf;
+
+    tmpbuf = hangul_string_convert(s, &len);
+    if (tmpbuf != NULL)
+	s = tmpbuf;
+
     while (len--)
 	inbuf[inbufcount++] = *s++;
+
+    if (tmpbuf != NULL)
+	vim_free(tmpbuf);
 }
 #endif
 
@@ -1763,7 +1772,7 @@ read_from_input_buf(buf, maxlen)
 fill_input_buf(exit_on_error)
     int	exit_on_error UNUSED;
 {
-#if defined(UNIX) || defined(OS2) || defined(VMS) || defined(MACOS_X_UNIX)
+#if defined(UNIX) || defined(VMS) || defined(MACOS_X_UNIX)
     int		len;
     int		try;
     static int	did_read_something = FALSE;
@@ -1787,7 +1796,7 @@ fill_input_buf(exit_on_error)
 	return;
     }
 #endif
-#if defined(UNIX) || defined(OS2) || defined(VMS) || defined(MACOS_X_UNIX)
+#if defined(UNIX) || defined(VMS) || defined(MACOS_X_UNIX)
     if (vim_is_input_buf_full())
 	return;
     /*
@@ -1931,9 +1940,9 @@ fill_input_buf(exit_on_error)
 	    ++inbufcount;
 	}
     }
-#endif /* UNIX or OS2 or VMS*/
+#endif /* UNIX or VMS*/
 }
-#endif /* defined(UNIX) || defined(FEAT_GUI) || defined(OS2)  || defined(VMS) */
+#endif /* defined(UNIX) || defined(FEAT_GUI) || defined(VMS) */
 
 /*
  * Exit because of an input read error.
