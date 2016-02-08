@@ -481,7 +481,7 @@ char *(*dyn_libintl_bind_textdomain_codeset)(const char *, const char *)
 				       = null_libintl_bind_textdomain_codeset;
 
     int
-dyn_libintl_init()
+dyn_libintl_init(void)
 {
     int i;
     static struct
@@ -501,8 +501,10 @@ dyn_libintl_init()
 	return 1;
     /* Load gettext library (libintl.dll) */
     hLibintlDLL = vimLoadLib(GETTEXT_DLL);
+#ifdef GETTEXT_DLL_ALT
     if (!hLibintlDLL)
 	hLibintlDLL = vimLoadLib(GETTEXT_DLL_ALT);
+#endif
     if (!hLibintlDLL)
     {
 	if (p_verbose > 0)
@@ -541,7 +543,7 @@ dyn_libintl_init()
 }
 
     void
-dyn_libintl_end()
+dyn_libintl_end(void)
 {
     if (hLibintlDLL)
 	FreeLibrary(hLibintlDLL);
@@ -1121,6 +1123,29 @@ mch_setmouse(int on)
     SetConsoleMode(g_hConIn, cmodein);
 }
 
+#ifdef FEAT_CHANNEL
+    static int
+handle_channel_event(void)
+{
+    int		    ret;
+    fd_set	    rfds;
+    int		    maxfd;
+
+    FD_ZERO(&rfds);
+    maxfd = channel_select_setup(-1, &rfds);
+    if (maxfd >= 0)
+    {
+	struct timeval  tv;
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	ret = select(maxfd + 1, &rfds, NULL, NULL, &tv);
+	if (ret > 0 && channel_select_check(ret, &rfds) > 0)
+	    return TRUE;
+    }
+    return FALSE;
+}
+#endif
 
 /*
  * Decode a MOUSE_EVENT.  If it's a valid event, return MOUSE_LEFT,
@@ -1454,12 +1479,21 @@ WaitForChar(long msec)
      */
     for (;;)
     {
+#ifdef MESSAGE_QUEUE
+	parse_queued_messages();
+#endif
 #ifdef FEAT_MZSCHEME
 	mzvim_check_threads();
 #endif
 #ifdef FEAT_CLIENTSERVER
 	serverProcessPendingMessages();
 #endif
+
+#ifdef FEAT_CHANNEL
+	if (handle_channel_event())
+	    return TRUE;
+#endif
+
 	if (0
 #ifdef FEAT_MOUSE
 		|| g_nMouseClick != -1
@@ -1560,6 +1594,7 @@ WaitForChar(long msec)
     if (input_available())
 	return TRUE;
 #endif
+
     return FALSE;
 }
 
@@ -4120,7 +4155,7 @@ mch_system_classic(char *cmd, int options)
     si.cbReserved2 = 0;
     si.lpReserved2 = NULL;
 
-    /* There is a strange error on Windows 95 when using "c:\\command.com".
+    /* There is a strange error on Windows 95 when using "c:\command.com".
      * When the "c:\\" is left out it works OK...? */
     if (mch_windows95()
 	    && (STRNICMP(cmd, "c:/command.com", 14) == 0
@@ -4996,6 +5031,59 @@ mch_call_shell(
 
     return x;
 }
+
+#if defined(FEAT_JOB) || defined(PROTO)
+    void
+mch_start_job(char *cmd, job_T *job)
+{
+    STARTUPINFO		si;
+    PROCESS_INFORMATION	pi;
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+
+    if (!vim_create_process(cmd, FALSE,
+	    CREATE_DEFAULT_ERROR_MODE |
+	    CREATE_NEW_PROCESS_GROUP |
+	    CREATE_NO_WINDOW,
+	    &si, &pi))
+	job->jv_status = JOB_FAILED;
+    else
+    {
+	job->jf_pi = pi;
+	job->jv_status = JOB_STARTED;
+    }
+}
+
+    char *
+mch_job_status(job_T *job)
+{
+    DWORD dwExitCode = 0;
+
+    if (!GetExitCodeProcess(job->jf_pi.hProcess, &dwExitCode))
+	return "dead";
+    if (dwExitCode != STILL_ACTIVE)
+    {
+	CloseHandle(job->jf_pi.hProcess);
+	CloseHandle(job->jf_pi.hThread);
+	return "dead";
+    }
+    return "run";
+}
+
+    int
+mch_stop_job(job_T *job, char_u *how)
+{
+    if (STRCMP(how, "kill") == 0)
+	TerminateProcess(job->jf_pi.hProcess, 0);
+    else
+	return GenerateConsoleCtrlEvent(
+	    STRCMP(how, "hup") == 0 ?
+		    CTRL_BREAK_EVENT : CTRL_C_EVENT,
+		job->jf_pi.dwProcessId) ? OK : FAIL;
+    return OK;
+}
+#endif
 
 
 #ifndef FEAT_GUI_W32

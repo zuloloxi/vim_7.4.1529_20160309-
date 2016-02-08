@@ -1110,13 +1110,27 @@ typedef double	float_T;
 
 typedef struct listvar_S list_T;
 typedef struct dictvar_S dict_T;
+typedef struct jobvar_S job_T;
+
+typedef enum
+{
+    VAR_UNKNOWN = 0,
+    VAR_NUMBER,	 /* "v_number" is used */
+    VAR_STRING,	 /* "v_string" is used */
+    VAR_FUNC,	 /* "v_string" is function name */
+    VAR_LIST,	 /* "v_list" is used */
+    VAR_DICT,	 /* "v_dict" is used */
+    VAR_FLOAT,	 /* "v_float" is used */
+    VAR_SPECIAL, /* "v_number" is used */
+    VAR_JOB	 /* "v_job" is used */
+} vartype_T;
 
 /*
  * Structure to hold an internal variable without a name.
  */
 typedef struct
 {
-    char	v_type;	    /* see below: VAR_NUMBER, VAR_STRING, etc. */
+    vartype_T	v_type;
     char	v_lock;	    /* see below: VAR_LOCKED, VAR_FIXED */
     union
     {
@@ -1127,17 +1141,11 @@ typedef struct
 	char_u		*v_string;	/* string value (can be NULL!) */
 	list_T		*v_list;	/* list value (can be NULL!) */
 	dict_T		*v_dict;	/* dict value (can be NULL!) */
+#ifdef FEAT_JOB
+	job_T		*v_job;		/* job value (can be NULL!) */
+#endif
     }		vval;
 } typval_T;
-
-/* Values for "v_type". */
-#define VAR_UNKNOWN 0
-#define VAR_NUMBER  1	/* "v_number" is used */
-#define VAR_STRING  2	/* "v_string" is used */
-#define VAR_FUNC    3	/* "v_string" is function name */
-#define VAR_LIST    4	/* "v_list" is used */
-#define VAR_DICT    5	/* "v_dict" is used */
-#define VAR_FLOAT   6	/* "v_float" is used */
 
 /* Values for "dv_scope". */
 #define VAR_SCOPE     1	/* a:, v:, s:, etc. scope dictionaries */
@@ -1201,7 +1209,6 @@ struct dictitem_S
     char_u	di_flags;	/* flags (only used for variable) */
     char_u	di_key[1];	/* key (actually longer!) */
 };
-
 typedef struct dictitem_S dictitem_T;
 
 #define DI_FLAGS_RO	1  /* "di_flags" value: read-only variable */
@@ -1223,6 +1230,30 @@ struct dictvar_S
     dict_T	*dv_copydict;	/* copied dict used by deepcopy() */
     dict_T	*dv_used_next;	/* next dict in used dicts list */
     dict_T	*dv_used_prev;	/* previous dict in used dicts list */
+};
+
+typedef enum
+{
+    JOB_FAILED,
+    JOB_STARTED,
+    JOB_ENDED
+} jobstatus_T;
+
+/*
+ * Structure to hold info about a Job.
+ */
+struct jobvar_S
+{
+#ifdef UNIX
+    pid_t	jv_pid;
+    int		jv_exitval;
+#endif
+#ifdef WIN32
+    PROCESS_INFORMATION	jf_pi;
+#endif
+    jobstatus_T	jv_status;
+
+    int		jv_refcount;	/* reference count */
 };
 
 /* structure used for explicit stack while garbage collecting hash tables */
@@ -2514,7 +2545,7 @@ struct VimMenu
     char_u	*actext;	    /* accelerator text (after TAB) */
     int		priority;	    /* Menu order priority */
 #ifdef FEAT_GUI
-    void	(*cb) __ARGS((vimmenu_T *));	    /* Call-back routine */
+    void	(*cb)(vimmenu_T *);	    /* Call-back routine */
 #endif
 #ifdef FEAT_TOOLBAR
     char_u	*iconfile;	    /* name of file for icon or NULL */
@@ -2682,3 +2713,26 @@ typedef struct {
   UINT32_T state[8];
   char_u   buffer[64];
 } context_sha256_T;
+
+/*
+ * Structure used for reading in json_decode().
+ */
+struct js_reader
+{
+    char_u	*js_buf;	/* text to be decoded */
+    char_u	*js_end;	/* NUL in js_buf */
+    int		js_used;	/* bytes used from js_buf */
+    int		(*js_fill)(struct js_reader *);
+				/* function to fill the buffer or NULL;
+                                 * return TRUE when the buffer was filled */
+    void	*js_cookie;	/* can be used by js_fill */
+};
+typedef struct js_reader js_read_T;
+
+/* mode for a channel */
+typedef enum
+{
+    MODE_RAW = 0,
+    MODE_JSON,
+    MODE_JS
+} ch_mode_T;

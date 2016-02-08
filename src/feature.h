@@ -254,13 +254,6 @@
 #endif
 
 /*
- * +ex_extra		":retab", ":right", ":left", ":center", ":normal".
- */
-#ifdef FEAT_NORMAL
-# define FEAT_EX_EXTRA
-#endif
-
-/*
  * +extra_search	'hlsearch' and 'incsearch' options.
  */
 #ifdef FEAT_NORMAL
@@ -1237,6 +1230,7 @@
  * +sniff		Sniff interface: "--enable-sniff"
  * +sun_workshop	Sun Workshop integration
  * +netbeans_intg	Netbeans integration
+ * +channel		Inter process communication
  */
 
 /*
@@ -1258,6 +1252,20 @@
 #if (!defined(FEAT_LISTCMDS) || !defined(FEAT_EVAL)) \
 	&& defined(FEAT_NETBEANS_INTG)
 # undef FEAT_NETBEANS_INTG
+#endif
+
+/*
+ * The +channel feature requires +eval.
+ */
+#if !defined(FEAT_EVAL) && defined(FEAT_CHANNEL)
+# undef FEAT_CHANNEL
+#endif
+
+/*
+ * The +job feature requires +eval and Unix or MS-Widndows.
+ */
+#if (defined(UNIX) || defined(WIN32)) && defined(FEAT_EVAL)
+# define FEAT_JOB
 #endif
 
 /*

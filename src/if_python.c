@@ -861,7 +861,7 @@ Python_RestoreThread(void)
 #endif
 
     void
-python_end()
+python_end(void)
 {
     static int recurse = 0;
 
@@ -899,7 +899,7 @@ python_end()
 
 #if (defined(DYNAMIC_PYTHON) && defined(FEAT_PYTHON3)) || defined(PROTO)
     int
-python_loaded()
+python_loaded(void)
 {
     return (hinstPython != 0);
 }
@@ -1555,6 +1555,12 @@ do_pyeval (char_u *str, typval_T *rettv)
 	case VAR_UNKNOWN:
 	    rettv->v_type = VAR_NUMBER;
 	    rettv->vval.v_number = 0;
+	    break;
+	case VAR_NUMBER:
+	case VAR_STRING:
+	case VAR_FLOAT:
+	case VAR_SPECIAL:
+	case VAR_JOB:
 	    break;
     }
 }

@@ -161,7 +161,9 @@ extern HWND s_hwnd;
 static HWND s_hwnd = 0;	    /* console window handle, set by GetConsoleHwnd() */
 #endif
 
-extern int WSInitialized;
+#ifdef FEAT_CHANNEL
+int WSInitialized = FALSE; /* WinSock is initialized */
+#endif
 
 /* Don't generate prototypes here, because some systems do have these
  * functions. */
@@ -231,7 +233,7 @@ mch_exit(int r)
 # ifdef FEAT_OLE
     UninitOLE();
 # endif
-# ifdef FEAT_NETBEANS_INTG
+# ifdef FEAT_CHANNEL
     if (WSInitialized)
     {
 	WSInitialized = FALSE;
@@ -284,7 +286,7 @@ mch_early_init(void)
  * Return TRUE if the input comes from a terminal, FALSE otherwise.
  */
     int
-mch_input_isatty()
+mch_input_isatty(void)
 {
 #ifdef FEAT_GUI_MSWIN
     return OK;	    /* GUI always has a tty */
@@ -353,7 +355,7 @@ mch_restore_title(
  * Return TRUE if we can restore the title (we can)
  */
     int
-mch_can_restore_title()
+mch_can_restore_title(void)
 {
     return TRUE;
 }
@@ -363,7 +365,7 @@ mch_can_restore_title()
  * Return TRUE if we can restore the icon title (we can't)
  */
     int
-mch_can_restore_icon()
+mch_can_restore_icon(void)
 {
     return FALSE;
 }
@@ -484,8 +486,7 @@ mch_isFullName(char_u *fname)
  * When the path looks like a URL leave it unmodified.
  */
     void
-slash_adjust(p)
-    char_u  *p;
+slash_adjust(char_u *p)
 {
     if (path_with_url(p))
 	return;
@@ -706,7 +707,7 @@ mch_new_shellsize(void)
  * We have no job control, so fake it by starting a new shell.
  */
     void
-mch_suspend()
+mch_suspend(void)
 {
     suspend_shell();
 }
@@ -721,7 +722,7 @@ mch_suspend()
  * Display the saved error message(s).
  */
     void
-display_errors()
+display_errors(void)
 {
     char *p;
 
@@ -862,7 +863,7 @@ can_end_termcap_mode(
  * return non-zero if a character is available
  */
     int
-mch_char_avail()
+mch_char_avail(void)
 {
     /* never used */
     return TRUE;
@@ -963,8 +964,7 @@ mch_icon_load_cb(char_u *fname, void *cookie)
  * Try loading an icon file from 'runtimepath'.
  */
     int
-mch_icon_load(iconp)
-    HANDLE *iconp;
+mch_icon_load(HANDLE *iconp)
 {
     return do_in_runtimepath((char_u *)"bitmaps/vim.ico",
 					      FALSE, mch_icon_load_cb, iconp);
@@ -1829,9 +1829,7 @@ static int prt_pos_x = 0;
 static int prt_pos_y = 0;
 
     void
-mch_print_start_line(margin, page_line)
-    int		margin;
-    int		page_line;
+mch_print_start_line(int margin, int page_line)
 {
     if (margin)
 	prt_pos_x = -prt_number_width;
@@ -2068,7 +2066,7 @@ shortcut_end:
  * Bring ourselves to the foreground.  Does work if the OS doesn't allow it.
  */
     void
-win32_set_foreground()
+win32_set_foreground(void)
 {
 # ifndef FEAT_GUI
     GetConsoleHwnd();	    /* get value of s_hwnd */
@@ -2484,9 +2482,9 @@ serverGetVimNames(void)
 }
 
     int
-serverSendReply(name, reply)
-    char_u	*name;		/* Where to send. */
-    char_u	*reply;		/* What to send. */
+serverSendReply(
+    char_u	*name,		/* Where to send. */
+    char_u	*reply)		/* What to send. */
 {
     HWND	target;
     COPYDATASTRUCT data;
@@ -2517,13 +2515,13 @@ serverSendReply(name, reply)
 }
 
     int
-serverSendToVim(name, cmd, result, ptarget, asExpr, silent)
-    char_u	 *name;			/* Where to send. */
-    char_u	 *cmd;			/* What to send. */
-    char_u	 **result;		/* Result of eval'ed expression */
-    void	 *ptarget;		/* HWND of server */
-    int		 asExpr;		/* Expression or keys? */
-    int		 silent;		/* don't complain about no server */
+serverSendToVim(
+    char_u	 *name,			/* Where to send. */
+    char_u	 *cmd,			/* What to send. */
+    char_u	 **result,		/* Result of eval'ed expression */
+    void	 *ptarget,		/* HWND of server */
+    int		 asExpr,		/* Expression or keys? */
+    int		 silent)		/* don't complain about no server */
 {
     HWND	target;
     COPYDATASTRUCT data;
@@ -2576,8 +2574,7 @@ serverSendToVim(name, cmd, result, ptarget, asExpr, silent)
  * Bring the server to the foreground.
  */
     void
-serverForeground(name)
-    char_u	*name;
+serverForeground(char_u *name)
 {
     HWND	target = findServer(name);
 
@@ -3093,3 +3090,22 @@ theend:
 }
 
 #endif /* defined(FEAT_GUI) || defined(FEAT_PRINTER) */
+
+#if defined(FEAT_CHANNEL) || defined(PROTO)
+/*
+ * Initialize the Winsock dll.
+ */
+    void
+channel_init_winsock(void)
+{
+    WSADATA wsaData;
+    int wsaerr;
+
+    if (WSInitialized)
+	return;
+
+    wsaerr = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (wsaerr == 0)
+	WSInitialized = TRUE;
+}
+#endif

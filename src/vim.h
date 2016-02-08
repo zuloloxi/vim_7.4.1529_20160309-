@@ -274,15 +274,6 @@
 # include "os_unix.h"	    /* bring lots of system header files */
 #endif
 
-#ifndef __ARGS
-# define __ARGS(x) x
-#endif
-
-/* __ARGS and __PARMS are the same thing. */
-#ifndef __PARMS
-# define __PARMS(x) __ARGS(x)
-#endif
-
 /* Mark unused function arguments with UNUSED, so that gcc -Wunused-parameter
  * can be used to check for mistakes. */
 #ifdef HAVE_ATTRIBUTE_UNUSED
@@ -517,9 +508,7 @@ typedef unsigned long u8char_T;	    /* long should be 32 bits or more */
 #ifdef HAVE_WCTYPE_H
 # include <wctype.h>
 #endif
-#ifdef HAVE_STDARG_H
-# include <stdarg.h>
-#endif
+#include <stdarg.h>
 
 #if defined(HAVE_SYS_SELECT_H) && \
 	(!defined(HAVE_SYS_TIME_H) || defined(SYS_SELECT_WITH_SYS_TIME))
@@ -530,6 +519,8 @@ typedef unsigned long u8char_T;	    /* long should be 32 bits or more */
 # ifdef HAVE_SYS_POLL_H
 #  include <sys/poll.h>
 #  define HAVE_POLL
+# elif defined(WIN32)
+#  define HAVE_SELECT
 # else
 #  ifdef HAVE_POLL_H
 #   include <poll.h>
@@ -1639,7 +1630,7 @@ typedef void	    *vim_acl_T;		/* dummy to pass an ACL to a function */
  * Include a prototype for mch_memmove(), it may not be in alloc.pro.
  */
 #ifdef VIM_MEMMOVE
-void mch_memmove __ARGS((void *, void *, size_t));
+void mch_memmove(void *, void *, size_t);
 #else
 # ifndef mch_memmove
 #  define mch_memmove(to, from, len) memmove(to, from, len)
@@ -1658,7 +1649,7 @@ void mch_memmove __ARGS((void *, void *, size_t));
 #ifdef HAVE_MEMSET
 # define vim_memset(ptr, c, size)   memset((ptr), (c), (size))
 #else
-void *vim_memset __ARGS((void *, int, size_t));
+void *vim_memset(void *, int, size_t);
 #endif
 
 #ifdef HAVE_MEMCMP
@@ -1667,7 +1658,7 @@ void *vim_memset __ARGS((void *, int, size_t));
 # ifdef HAVE_BCMP
 #  define vim_memcmp(p1, p2, len)   bcmp((p1), (p2), (len))
 # else
-int vim_memcmp __ARGS((void *, void *, size_t));
+int vim_memcmp(void *, void *, size_t);
 #  define VIM_MEMCMP
 # endif
 #endif
@@ -1896,7 +1887,17 @@ typedef int proftime_T;	    /* dummy for function prototypes */
 #define VV_OPTION_OLD   60
 #define VV_OPTION_TYPE  61
 #define VV_ERRORS	62
-#define VV_LEN		63	/* number of v: vars */
+#define VV_FALSE	63
+#define VV_TRUE		64
+#define VV_NULL		65
+#define VV_NONE		66
+#define VV_LEN		67	/* number of v: vars */
+
+/* used for v_number in VAR_SPECIAL */
+#define VVAL_FALSE	0L
+#define VVAL_TRUE	1L
+#define VVAL_NONE	2L
+#define VVAL_NULL	3L
 
 #ifdef FEAT_CLIPBOARD
 
@@ -1919,8 +1920,8 @@ typedef int proftime_T;	    /* dummy for function prototypes */
 #  ifdef FEAT_OLE
 #   define WM_OLE (WM_APP+0)
 #  endif
-#  ifdef FEAT_NETBEANS_INTG
-    /* message for Netbeans socket event */
+#  ifdef FEAT_CHANNEL
+    /* message for channel socket event */
 #   define WM_NETBEANS (WM_APP+1)
 #  endif
 # endif
@@ -1967,6 +1968,14 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
 # include <io.h>	    /* for access() */
 
 # define stat(a,b) (access(a,0) ? -1 : stat(a,b))
+#endif
+
+#ifdef FEAT_CHANNEL
+# ifdef WIN64
+typedef __int64 sock_T;
+# else
+typedef int sock_T;
+# endif
 #endif
 
 #include "ex_cmds.h"	    /* Ex command defines */
@@ -2300,6 +2309,21 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
 # define SET_NO_HLSEARCH(flag) no_hlsearch = (flag); set_vim_var_nr(VV_HLSEARCH, !no_hlsearch && p_hls)
 #else
 # define SET_NO_HLSEARCH(flag) no_hlsearch = (flag)
+#endif
+
+#ifdef FEAT_CHANNEL
+# define MAX_OPEN_CHANNELS 10
+#else
+# define MAX_OPEN_CHANNELS 0
+#endif
+
+/* Options for json_encode() and json_decode. */
+#define JSON_JS		1   /* use JS instead of JSON */
+#define JSON_NO_NONE	2   /* v:none item not allowed */
+
+#ifdef FEAT_MZSCHEME
+/* this is in main.c, cproto can't handle it. */
+int vim_main2(int argc, char **argv);
 #endif
 
 #endif /* VIM__H */
