@@ -27,8 +27,7 @@
 # endif
 #endif
 
-#if defined(MSDOS) || defined(WIN16) || defined(WIN32) || defined(_WIN64) \
-	|| defined(__EMX__)
+#if defined(WIN32) || defined(_WIN64) || defined(__EMX__)
 # include "vimio.h"
 #endif
 
@@ -126,7 +125,6 @@
     || defined(FEAT_GUI_ATHENA) \
     || defined(FEAT_GUI_MAC) \
     || defined(FEAT_GUI_W32) \
-    || defined(FEAT_GUI_W16) \
     || defined(FEAT_GUI_PHOTON)
 # define FEAT_GUI_ENABLED  /* also defined with NO_X11_INCLUDES */
 # if !defined(FEAT_GUI) && !defined(NO_X11_INCLUDES)
@@ -147,10 +145,10 @@
 # define _CRT_NONSTDC_NO_DEPRECATE
 #endif
 
-#if defined(FEAT_GUI_W32) || defined(FEAT_GUI_W16)
+#if defined(FEAT_GUI_W32)
 # define FEAT_GUI_MSWIN
 #endif
-#if defined(WIN16) || defined(WIN32) || defined(_WIN64)
+#if defined(WIN32) || defined(_WIN64)
 # define MSWIN
 #endif
 /* Practically everything is common to both Win32 and Win64 */
@@ -164,21 +162,6 @@
  */
 #ifdef WIN3264
 # define VIM_SIZEOF_INT 4
-#endif
-#ifdef MSDOS
-# ifdef DJGPP
-#  ifndef FEAT_GUI_GTK		/* avoid problems when generating prototypes */
-#   define VIM_SIZEOF_INT 4	/* 32 bit ints */
-#  endif
-#  define DOS32
-#  define FEAT_CLIPBOARD
-# else
-#  ifndef FEAT_GUI_GTK		/* avoid problems when generating prototypes */
-#   define VIM_SIZEOF_INT 2	/* 16 bit ints */
-#  endif
-#  define SMALL_MALLOC		/* 16 bit storage allocation */
-#  define DOS16
-# endif
 #endif
 
 #ifdef AMIGA
@@ -302,14 +285,6 @@
 
 #ifdef AMIGA
 # include "os_amiga.h"
-#endif
-
-#ifdef MSDOS
-# include "os_msdos.h"
-#endif
-
-#ifdef WIN16
-# include "os_win16.h"
 #endif
 
 #ifdef WIN3264
@@ -467,11 +442,11 @@ typedef unsigned long u8char_T;	    /* long should be 32 bits or more */
 #ifdef _DCC
 # include <sys/stat.h>
 #endif
-#if defined(MSDOS) || defined(MSWIN)
+#if defined(MSWIN)
 # include <sys/stat.h>
 #endif
 
-#if defined(HAVE_ERRNO_H) || defined(DJGPP) || defined(WIN16) \
+#if defined(HAVE_ERRNO_H) \
 	|| defined(WIN32) || defined(_WIN64) || defined(__EMX__)
 # include <errno.h>
 #endif
@@ -782,6 +757,7 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define EXPAND_USER		42
 #define EXPAND_SYNTIME		43
 #define EXPAND_USER_ADDR_TYPE	44
+#define EXPAND_PACKADD		45
 
 /* Values for exmode_active (0 is no exmode) */
 #define EXMODE_NORMAL		1
@@ -872,11 +848,7 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 
 #ifdef FEAT_SYN_HL
 # define SST_MIN_ENTRIES 150	/* minimal size for state stack array */
-# ifdef FEAT_GUI_W16
-#  define SST_MAX_ENTRIES 500	/* (only up to 64K blocks) */
-# else
-#  define SST_MAX_ENTRIES 1000	/* maximal size for state stack array */
-# endif
+# define SST_MAX_ENTRIES 1000	/* maximal size for state stack array */
 # define SST_FIX_STATES	 7	/* size of sst_stack[]. */
 # define SST_DIST	 16	/* normal distance between entries */
 # define SST_INVALID	(synstate_T *)-1	/* invalid syn_state pointer */
@@ -1730,6 +1702,12 @@ typedef struct timeval proftime_T;
 typedef int proftime_T;	    /* dummy for function prototypes */
 #endif
 
+#ifdef _WIN64
+typedef __int64 sock_T;
+#else
+typedef int sock_T;
+#endif
+
 /* Include option.h before structs.h, because the number of window-local and
  * buffer-local options is used there. */
 #include "option.h"	    /* options and default values */
@@ -1920,10 +1898,6 @@ typedef int proftime_T;	    /* dummy for function prototypes */
 #  ifdef FEAT_OLE
 #   define WM_OLE (WM_APP+0)
 #  endif
-#  ifdef FEAT_CHANNEL
-    /* message for channel socket event */
-#   define WM_NETBEANS (WM_APP+1)
-#  endif
 # endif
 
 /* Info about selected text */
@@ -1970,14 +1944,6 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
 # define stat(a,b) (access(a,0) ? -1 : stat(a,b))
 #endif
 
-#ifdef FEAT_CHANNEL
-# ifdef WIN64
-typedef __int64 sock_T;
-# else
-typedef int sock_T;
-# endif
-#endif
-
 #include "ex_cmds.h"	    /* Ex command defines */
 #include "proto.h"	    /* function prototypes */
 
@@ -2006,10 +1972,6 @@ typedef int sock_T;
 
 
 #include "globals.h"	    /* global variables and messages */
-
-#ifdef FEAT_SNIFF
-# include "if_sniff.h"
-#endif
 
 #ifndef FEAT_VIRTUALEDIT
 # define getvvcol(w, p, s, c, e) getvcol(w, p, s, c, e)

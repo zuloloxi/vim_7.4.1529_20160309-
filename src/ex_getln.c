@@ -112,6 +112,7 @@ static int	expand_showtail(expand_T *xp);
 #ifdef FEAT_CMDL_COMPL
 static int	expand_shellcmd(char_u *filepat, int *num_file, char_u ***file, int flagsarg);
 static int	ExpandRTDir(char_u *pat, int *num_file, char_u ***file, char *dirname[]);
+static int	ExpandPackAddDir(char_u *pat, int *num_file, char_u ***file);
 # ifdef FEAT_CMDHIST
 static char_u	*get_history_arg(expand_T *xp, int idx);
 # endif
@@ -206,9 +207,6 @@ getcmdline(
     struct cmdline_info save_ccline;
 #endif
 
-#ifdef FEAT_SNIFF
-    want_sniff_request = 0;
-#endif
 #ifdef FEAT_EVAL
     if (firstc == -1)
     {
@@ -626,8 +624,8 @@ getcmdline(
 #endif
 		    if (vim_ispathsep(ccline.cmdbuff[j])
 #ifdef BACKSLASH_IN_FILENAME
-			    && vim_strchr(" *?[{`$%#", ccline.cmdbuff[j + 1])
-			       == NULL
+			    && vim_strchr((char_u *)" *?[{`$%#",
+				ccline.cmdbuff[j + 1]) == NULL
 #endif
 		       )
 		    {
@@ -4234,6 +4232,7 @@ addstar(
 		|| context == EXPAND_COMPILER
 		|| context == EXPAND_OWNSYNTAX
 		|| context == EXPAND_FILETYPE
+		|| context == EXPAND_PACKADD
 		|| (context == EXPAND_TAGS && fname[0] == '/'))
 	    retval = vim_strnsave(fname, len);
 	else
@@ -4650,6 +4649,8 @@ ExpandFromContext(
     if (xp->xp_context == EXPAND_USER_LIST)
 	return ExpandUserList(xp, num_file, file);
 # endif
+    if (xp->xp_context == EXPAND_PACKADD)
+	return ExpandPackAddDir(pat, num_file, file);
 
     regmatch.regprog = vim_regcomp(pat, p_magic ? RE_MAGIC : 0);
     if (regmatch.regprog == NULL)
@@ -4918,7 +4919,7 @@ expand_shellcmd(
 	if (*s == ' ')
 	    ++s;	/* Skip space used for absolute path name. */
 
-#if defined(MSDOS) || defined(MSWIN)
+#if defined(MSWIN)
 	e = vim_strchr(s, ';');
 #else
 	e = vim_strchr(s, ':');
@@ -5183,6 +5184,58 @@ ExpandRTDir(
     return OK;
 }
 
+/*
+ * Expand loadplugin names:
+ * 'packpath'/pack/ * /opt/{pat}
+ */
+    static int
+ExpandPackAddDir(
+    char_u	*pat,
+    int		*num_file,
+    char_u	***file)
+{
+    char_u	*s;
+    char_u	*e;
+    char_u	*match;
+    garray_T	ga;
+    int		i;
+    int		pat_len;
+
+    *num_file = 0;
+    *file = NULL;
+    pat_len = (int)STRLEN(pat);
+    ga_init2(&ga, (int)sizeof(char *), 10);
+
+    s = alloc((unsigned)(pat_len + 26));
+    if (s == NULL)
+    {
+	ga_clear_strings(&ga);
+	return FAIL;
+    }
+    sprintf((char *)s, "pack/*/opt/%s*", pat);
+    globpath(p_pp, s, &ga, 0);
+    vim_free(s);
+
+    for (i = 0; i < ga.ga_len; ++i)
+    {
+	match = ((char_u **)ga.ga_data)[i];
+	s = gettail(match);
+	e = s + STRLEN(s);
+	mch_memmove(match, s, e - s + 1);
+    }
+
+    if (ga.ga_len == 0)
+	return FAIL;
+
+    /* Sort and remove duplicates which can happen when specifying multiple
+     * directories in dirnames. */
+    remove_duplicates(&ga);
+
+    *file = ga.ga_data;
+    *num_file = ga.ga_len;
+    return OK;
+}
+
 #endif
 
 #if defined(FEAT_CMDL_COMPL) || defined(FEAT_EVAL) || defined(PROTO)
@@ -5217,7 +5270,7 @@ globpath(
 	copy_option_part(&path, buf, MAXPATHL, ",");
 	if (STRLEN(buf) + STRLEN(file) + 2 < MAXPATHL)
 	{
-# if defined(MSWIN) || defined(MSDOS)
+# if defined(MSWIN)
 	    /* Using the platform's path separator (\) makes vim incorrectly
 	     * treat it as an escape character, use '/' instead. */
 	    if (*buf != NUL && !after_pathsep(buf, buf + STRLEN(buf)))
@@ -5730,6 +5783,7 @@ clr_history(int histype)
 	{
 	    vim_free(hisptr->hisstr);
 	    clear_hist_entry(hisptr);
+	    hisptr++;
 	}
 	hisidx[histype] = -1;	/* mark history as cleared */
 	hisnum[histype] = 0;	/* reset identifier counter */

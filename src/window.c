@@ -3896,8 +3896,8 @@ leave_tabpage(
 enter_tabpage(
     tabpage_T	*tp,
     buf_T	*old_curbuf UNUSED,
-    int		trigger_enter_autocmds UNUSED,
-    int		trigger_leave_autocmds UNUSED)
+    int		trigger_enter_autocmds,
+    int		trigger_leave_autocmds)
 {
     int		old_off = tp->tp_firstwin->w_winrow;
     win_T	*next_prevwin = tp->tp_prevwin;
@@ -6438,7 +6438,7 @@ vim_FullName(
 	/* something failed; use the file name (truncate when too long) */
 	vim_strncpy(buf, fname, len - 1);
     }
-#if defined(MACOS_CLASSIC) || defined(MSDOS) || defined(MSWIN)
+#if defined(MACOS_CLASSIC) || defined(MSWIN)
     slash_adjust(buf);
 #endif
     return retval;

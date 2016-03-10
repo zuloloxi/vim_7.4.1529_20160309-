@@ -93,11 +93,7 @@ static struct cmdname
     ex_func_T   cmd_func;	/* function for this command */
     long_u	cmd_argt;	/* flags declared above */
     int		cmd_addr_type;	/* flag for address type */
-}
-# if defined(FEAT_GUI_W16)
-_far
-# endif
-cmdnames[] =
+} cmdnames[] =
 #else
 # define EX(a, b, c, d, e)  a
 enum CMD_index
@@ -1015,6 +1011,9 @@ EX(CMD_ownsyntax,	"ownsyntax",	ex_ownsyntax,
 EX(CMD_print,		"print",	ex_print,
 			RANGE|WHOLEFOLD|COUNT|EXFLAGS|TRLBAR|CMDWIN|SBOXOK,
 			ADDR_LINES),
+EX(CMD_packadd,		"packadd",	ex_packadd,
+			BANG|FILE1|NEEDARG|TRLBAR|SBOXOK|CMDWIN,
+			ADDR_LINES),
 EX(CMD_pclose,		"pclose",	ex_pclose,
 			BANG|TRLBAR,
 			ADDR_LINES),
@@ -1281,9 +1280,6 @@ EX(CMD_smenu,		"smenu",	ex_menu,
 			ADDR_LINES),
 EX(CMD_snext,		"snext",	ex_next,
 			RANGE|NOTADR|BANG|FILES|EDITCMD|ARGOPT|TRLBAR,
-			ADDR_LINES),
-EX(CMD_sniff,		"sniff",	ex_sniff,
-			EXTRA|TRLBAR,
 			ADDR_LINES),
 EX(CMD_snomagic,	"snomagic",	ex_submagic,
 			RANGE|WHOLEFOLD|EXTRA|CMDWIN,

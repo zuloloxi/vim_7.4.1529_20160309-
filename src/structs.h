@@ -1110,7 +1110,12 @@ typedef double	float_T;
 
 typedef struct listvar_S list_T;
 typedef struct dictvar_S dict_T;
+
 typedef struct jobvar_S job_T;
+typedef struct readq_S readq_T;
+typedef struct jsonq_S jsonq_T;
+typedef struct cbq_S cbq_T;
+typedef struct channel_S channel_T;
 
 typedef enum
 {
@@ -1122,7 +1127,8 @@ typedef enum
     VAR_DICT,	 /* "v_dict" is used */
     VAR_FLOAT,	 /* "v_float" is used */
     VAR_SPECIAL, /* "v_number" is used */
-    VAR_JOB	 /* "v_job" is used */
+    VAR_JOB,	 /* "v_job" is used */
+    VAR_CHANNEL	 /* "v_channel" is used */
 } vartype_T;
 
 /*
@@ -1143,6 +1149,9 @@ typedef struct
 	dict_T		*v_dict;	/* dict value (can be NULL!) */
 #ifdef FEAT_JOB
 	job_T		*v_job;		/* job value (can be NULL!) */
+#endif
+#ifdef FEAT_CHANNEL
+	channel_T	*v_channel;	/* channel value (can be NULL!) */
 #endif
     }		vval;
 } typval_T;
@@ -1244,17 +1253,216 @@ typedef enum
  */
 struct jobvar_S
 {
+    job_T	*jv_next;
+    job_T	*jv_prev;
 #ifdef UNIX
     pid_t	jv_pid;
-    int		jv_exitval;
 #endif
 #ifdef WIN32
-    PROCESS_INFORMATION	jf_pi;
+    PROCESS_INFORMATION	jv_proc_info;
+    HANDLE		jv_job_object;
 #endif
     jobstatus_T	jv_status;
+    char_u	*jv_stoponexit; /* allocated */
+    int		jv_exitval;
+    char_u	*jv_exit_cb;	/* allocated */
+
+    buf_T	*jv_in_buf;	/* buffer from "in-name" */
 
     int		jv_refcount;	/* reference count */
+    channel_T	*jv_channel;	/* channel for I/O, reference counted */
 };
+
+/*
+ * Structures to hold info about a Channel.
+ */
+struct readq_S
+{
+    char_u	*rq_buffer;
+    readq_T	*rq_next;
+    readq_T	*rq_prev;
+};
+
+struct jsonq_S
+{
+    typval_T	*jq_value;
+    jsonq_T	*jq_next;
+    jsonq_T	*jq_prev;
+};
+
+struct cbq_S
+{
+    char_u	*cq_callback;
+    int		cq_seq_nr;
+    cbq_T	*cq_next;
+    cbq_T	*cq_prev;
+};
+
+/* mode for a channel */
+typedef enum
+{
+    MODE_NL = 0,
+    MODE_RAW,
+    MODE_JSON,
+    MODE_JS
+} ch_mode_T;
+
+/* Ordering matters, it is used in for loops: IN is last, only SOCK/OUT/ERR
+ * are polled. */
+#define PART_SOCK   0
+#define CH_SOCK_FD	ch_part[PART_SOCK].ch_fd
+
+#if defined(UNIX) || defined(WIN32)
+# define CHANNEL_PIPES
+# define INVALID_FD  (-1)
+
+# define PART_OUT   1
+# define PART_ERR   2
+# define PART_IN    3
+# define CH_OUT_FD	ch_part[PART_OUT].ch_fd
+# define CH_ERR_FD	ch_part[PART_ERR].ch_fd
+# define CH_IN_FD	ch_part[PART_IN].ch_fd
+#endif
+
+/* The per-fd info for a channel. */
+typedef struct {
+    sock_T	ch_fd;	    /* socket/stdin/stdout/stderr, -1 if not used */
+
+# if defined(UNIX) && !defined(HAVE_SELECT)
+    int		ch_poll_idx;	/* used by channel_poll_setup() */
+# endif
+
+#ifdef FEAT_GUI_X11
+    XtInputId	ch_inputHandler; /* Cookie for input */
+#endif
+#ifdef FEAT_GUI_GTK
+    gint	ch_inputHandler; /* Cookie for input */
+#endif
+
+    ch_mode_T	ch_mode;
+    int		ch_timeout;	/* request timeout in msec */
+
+    readq_T	ch_head;	/* header for circular raw read queue */
+    jsonq_T	ch_json_head;	/* header for circular json read queue */
+    int		ch_block_id;	/* ID that channel_read_json_block() is
+				   waiting for */
+
+    cbq_T	ch_cb_head;	/* dummy node for per-request callbacks */
+    char_u	*ch_callback;	/* call when a msg is not handled */
+
+    buf_T	*ch_buffer;	/* buffer to read from or write to */
+    linenr_T	ch_buf_top;	/* next line to send */
+    linenr_T	ch_buf_bot;	/* last line to send */
+} chanpart_T;
+
+struct channel_S {
+    channel_T	*ch_next;
+    channel_T	*ch_prev;
+
+    int		ch_id;		/* ID of the channel */
+
+    chanpart_T	ch_part[4];	/* info for socket, out, err and in */
+
+    int		ch_error;	/* When TRUE an error was reported.  Avoids
+				 * giving pages full of error messages when
+				 * the other side has exited, only mention the
+				 * first error until the connection works
+				 * again. */
+
+    void	(*ch_nb_close_cb)(void);
+				/* callback for Netbeans when channel is
+				 * closed */
+
+    char_u	*ch_callback;	/* call when any msg is not handled */
+    char_u	*ch_close_cb;	/* call when channel is closed */
+
+    job_T	*ch_job;	/* Job that uses this channel; this does not
+				 * count as a reference to avoid a circular
+				 * reference. */
+    int		ch_job_killed;	/* TRUE when there was a job and it was killed
+				 * or we know it died. */
+
+    int		ch_refcount;	/* reference count */
+};
+
+#define JO_MODE		    0x0001	/* channel mode */
+#define JO_IN_MODE	    0x0002	/* stdin mode */
+#define JO_OUT_MODE	    0x0004	/* stdout mode */
+#define JO_ERR_MODE	    0x0008	/* stderr mode */
+#define JO_CALLBACK	    0x0010	/* channel callback */
+#define JO_OUT_CALLBACK	    0x0020	/* stdout callback */
+#define JO_ERR_CALLBACK	    0x0040	/* stderr callback */
+#define JO_CLOSE_CALLBACK   0x0080	/* close callback */
+#define JO_WAITTIME	    0x0100	/* only for ch_open() */
+#define JO_TIMEOUT	    0x0200	/* all timeouts */
+#define JO_OUT_TIMEOUT	    0x0400	/* stdout timeouts */
+#define JO_ERR_TIMEOUT	    0x0800	/* stderr timeouts */
+#define JO_PART		    0x1000	/* "part" */
+#define JO_ID		    0x2000	/* "id" */
+#define JO_STOPONEXIT	    0x4000	/* "stoponexit" */
+#define JO_EXIT_CB	    0x8000	/* "exit-cb" */
+#define JO_OUT_IO	    0x10000	/* "out-io" */
+#define JO_ERR_IO	    0x20000	/* "err-io" (JO_OUT_IO << 1) */
+#define JO_IN_IO	    0x40000	/* "in-io" (JO_OUT_IO << 2) */
+#define JO_OUT_NAME	    0x80000	/* "out-name" */
+#define JO_ERR_NAME	    0x100000	/* "err-name" (JO_OUT_NAME << 1) */
+#define JO_IN_NAME	    0x200000	/* "in-name" (JO_OUT_NAME << 2) */
+#define JO_IN_TOP	    0x400000	/* "in-top" */
+#define JO_IN_BOT	    0x800000	/* "in-bot" */
+#define JO_OUT_BUF	    0x1000000	/* "out-buf" */
+#define JO_ERR_BUF	    0x2000000	/* "err-buf" (JO_OUT_BUF << 1) */
+#define JO_IN_BUF	    0x4000000	/* "in-buf" (JO_OUT_BUF << 2) */
+#define JO_ALL		    0xfffffff
+
+#define JO_MODE_ALL	(JO_MODE + JO_IN_MODE + JO_OUT_MODE + JO_ERR_MODE)
+#define JO_CB_ALL \
+    (JO_CALLBACK + JO_OUT_CALLBACK + JO_ERR_CALLBACK + JO_CLOSE_CALLBACK)
+#define JO_TIMEOUT_ALL	(JO_TIMEOUT + JO_OUT_TIMEOUT + JO_ERR_TIMEOUT)
+
+typedef enum {
+    JIO_PIPE,	    /* default */
+    JIO_NULL,
+    JIO_FILE,
+    JIO_BUFFER,
+    JIO_OUT
+} job_io_T;
+
+/*
+ * Options for job and channel commands.
+ */
+typedef struct
+{
+    int		jo_set;		/* JO_ bits for values that were set */
+
+    ch_mode_T	jo_mode;
+    ch_mode_T	jo_in_mode;
+    ch_mode_T	jo_out_mode;
+    ch_mode_T	jo_err_mode;
+
+    job_io_T	jo_io[4];	/* PART_OUT, PART_ERR, PART_IN */
+    char_u	jo_io_name_buf[4][NUMBUFLEN];
+    char_u	*jo_io_name[4];	/* not allocated! */
+    int		jo_io_buf[4];
+
+    linenr_T	jo_in_top;
+    linenr_T	jo_in_bot;
+
+    char_u	*jo_callback;	/* not allocated! */
+    char_u	*jo_out_cb;	/* not allocated! */
+    char_u	*jo_err_cb;	/* not allocated! */
+    char_u	*jo_close_cb;	/* not allocated! */
+    int		jo_waittime;
+    int		jo_timeout;
+    int		jo_out_timeout;
+    int		jo_err_timeout;
+    int		jo_part;
+    int		jo_id;
+    char_u	jo_soe_buf[NUMBUFLEN];
+    char_u	*jo_stoponexit;
+    char_u	jo_ecb_buf[NUMBUFLEN];
+    char_u	*jo_exit_cb;
+} jobopt_T;
+
 
 /* structure used for explicit stack while garbage collecting hash tables */
 typedef struct ht_stack_S
@@ -1445,10 +1653,6 @@ struct file_buffer
     char	 b_fab_rat;	/* Record attribute */
     unsigned int b_fab_mrs;	/* Max record size  */
 #endif
-#ifdef FEAT_SNIFF
-    int		b_sniff;	/* file was loaded through Sniff */
-#endif
-
     int		b_fnum;		/* buffer number for this file. */
 
     int		b_changed;	/* 'modified': Set to TRUE if something in the
@@ -1670,9 +1874,7 @@ struct file_buffer
 #endif
     int		b_p_ro;		/* 'readonly' */
     long	b_p_sw;		/* 'shiftwidth' */
-#ifndef SHORT_FNAME
     int		b_p_sn;		/* 'shortname' */
-#endif
 #ifdef FEAT_SMARTINDENT
     int		b_p_si;		/* 'smartindent' */
 #endif
@@ -1808,9 +2010,7 @@ struct file_buffer
 				   access b_spell without #ifdef. */
 #endif
 
-#ifndef SHORT_FNAME
     int		b_shortname;	/* this file has an 8.3 file name */
-#endif
 
 #ifdef FEAT_MZSCHEME
     void	*b_mzscheme_ref; /* The MzScheme reference to this buffer */
@@ -1854,6 +2054,10 @@ struct file_buffer
 #ifdef FEAT_NETBEANS_INTG
     int		b_netbeans_file;    /* TRUE when buffer is owned by NetBeans */
     int		b_was_netbeans_file;/* TRUE if b_netbeans_file was once set */
+#endif
+#ifdef FEAT_CHANNEL
+    int		b_write_to_channel; /* TRUE when appended lines are written to
+				     * a channel. */
 #endif
 
 #ifdef FEAT_CRYPT
@@ -2565,7 +2769,9 @@ struct VimMenu
 #ifdef FEAT_GUI_GTK
     GtkWidget	*id;		    /* Manage this to enable item */
     GtkWidget	*submenu_id;	    /* If this is submenu, add children here */
+# if defined(GTK_CHECK_VERSION) && !GTK_CHECK_VERSION(3,4,0)
     GtkWidget	*tearoff_handle;
+# endif
     GtkWidget   *label;		    /* Used by "set wak=" code. */
 #endif
 #ifdef FEAT_GUI_MOTIF
@@ -2578,10 +2784,6 @@ struct VimMenu
 #endif
 #ifdef FEAT_BEVAL_TIP
     BalloonEval *tip;		    /* tooltip for this menu item */
-#endif
-#ifdef FEAT_GUI_W16
-    UINT	id;		    /* Id of menu item */
-    HMENU	submenu_id;	    /* If this is submenu, add children here */
 #endif
 #ifdef FEAT_GUI_W32
     UINT	id;		    /* Id of menu item */
@@ -2728,11 +2930,3 @@ struct js_reader
     void	*js_cookie;	/* can be used by js_fill */
 };
 typedef struct js_reader js_read_T;
-
-/* mode for a channel */
-typedef enum
-{
-    MODE_RAW = 0,
-    MODE_JSON,
-    MODE_JS
-} ch_mode_T;

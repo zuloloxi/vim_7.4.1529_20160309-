@@ -3920,6 +3920,11 @@ wait4pid(pid_t child, waitstatus *status)
 }
 
 #if defined(FEAT_JOB) || !defined(USE_SYSTEM) || defined(PROTO)
+/*
+ * Parse "cmd" and put the white-separated parts in "argv".
+ * "argv" is an allocated array with "argc" entries.
+ * Returns FAIL when out of memory.
+ */
     int
 mch_parse_cmd(char_u *cmd, int use_shcf, char ***argv, int *argc)
 {
@@ -3976,6 +3981,42 @@ mch_parse_cmd(char_u *cmd, int use_shcf, char ***argv, int *argc)
 	}
     }
     return OK;
+}
+#endif
+
+#if !defined(USE_SYSTEM) || defined(FEAT_JOB)
+    static void
+set_child_environment(void)
+{
+# ifdef HAVE_SETENV
+    char	envbuf[50];
+# else
+    static char	envbuf_Rows[20];
+    static char	envbuf_Columns[20];
+# endif
+
+    /* Simulate to have a dumb terminal (for now) */
+# ifdef HAVE_SETENV
+    setenv("TERM", "dumb", 1);
+    sprintf((char *)envbuf, "%ld", Rows);
+    setenv("ROWS", (char *)envbuf, 1);
+    sprintf((char *)envbuf, "%ld", Rows);
+    setenv("LINES", (char *)envbuf, 1);
+    sprintf((char *)envbuf, "%ld", Columns);
+    setenv("COLUMNS", (char *)envbuf, 1);
+# else
+    /*
+     * Putenv does not copy the string, it has to remain valid.
+     * Use a static array to avoid losing allocated memory.
+     */
+    putenv("TERM=dumb");
+    sprintf(envbuf_Rows, "ROWS=%ld", Rows);
+    putenv(envbuf_Rows);
+    sprintf(envbuf_Rows, "LINES=%ld", Rows);
+    putenv(envbuf_Rows);
+    sprintf(envbuf_Columns, "COLUMNS=%ld", Columns);
+    putenv(envbuf_Columns);
+# endif
 }
 #endif
 
@@ -4129,12 +4170,6 @@ mch_call_shell(
     int		fd_toshell[2];		/* for pipes */
     int		fd_fromshell[2];
     int		pipe_error = FALSE;
-# ifdef HAVE_SETENV
-    char	envbuf[50];
-# else
-    static char	envbuf_Rows[20];
-    static char	envbuf_Columns[20];
-# endif
     int		did_settmode = FALSE;	/* settmode(TMODE_RAW) called */
 
     newcmd = vim_strsave(p_sh);
@@ -4344,28 +4379,7 @@ mch_call_shell(
 #  endif
 		}
 # endif
-		/* Simulate to have a dumb terminal (for now) */
-# ifdef HAVE_SETENV
-		setenv("TERM", "dumb", 1);
-		sprintf((char *)envbuf, "%ld", Rows);
-		setenv("ROWS", (char *)envbuf, 1);
-		sprintf((char *)envbuf, "%ld", Rows);
-		setenv("LINES", (char *)envbuf, 1);
-		sprintf((char *)envbuf, "%ld", Columns);
-		setenv("COLUMNS", (char *)envbuf, 1);
-# else
-		/*
-		 * Putenv does not copy the string, it has to remain valid.
-		 * Use a static array to avoid losing allocated memory.
-		 */
-		putenv("TERM=dumb");
-		sprintf(envbuf_Rows, "ROWS=%ld", Rows);
-		putenv(envbuf_Rows);
-		sprintf(envbuf_Rows, "LINES=%ld", Rows);
-		putenv(envbuf_Rows);
-		sprintf(envbuf_Columns, "COLUMNS=%ld", Columns);
-		putenv(envbuf_Columns);
-# endif
+		set_child_environment();
 
 		/*
 		 * stderr is only redirected when using the GUI, so that a
@@ -5023,16 +5037,99 @@ error:
 
 #if defined(FEAT_JOB) || defined(PROTO)
     void
-mch_start_job(char **argv, job_T *job)
+mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
 {
-    pid_t pid = fork();
+    pid_t	pid;
+# ifdef FEAT_CHANNEL
+    int		fd_in[2];	/* for stdin */
+    int		fd_out[2];	/* for stdout */
+    int		fd_err[2];	/* for stderr */
+    channel_T	*channel = NULL;
+    int		use_null_for_in = options->jo_io[PART_IN] == JIO_NULL;
+    int		use_null_for_out = options->jo_io[PART_OUT] == JIO_NULL;
+    int		use_null_for_err = options->jo_io[PART_ERR] == JIO_NULL;
+    int		use_file_for_in = options->jo_io[PART_IN] == JIO_FILE;
+    int		use_file_for_out = options->jo_io[PART_OUT] == JIO_FILE;
+    int		use_file_for_err = options->jo_io[PART_ERR] == JIO_FILE;
+    int		use_out_for_err = options->jo_io[PART_ERR] == JIO_OUT;
 
-    if (pid  == -1)	/* maybe we should use vfork() */
+    if (use_out_for_err && use_null_for_out)
+	use_null_for_err = TRUE;
+
+    /* default is to fail */
+    job->jv_status = JOB_FAILED;
+    fd_in[0] = -1;
+    fd_in[1] = -1;
+    fd_out[0] = -1;
+    fd_out[1] = -1;
+    fd_err[0] = -1;
+    fd_err[1] = -1;
+
+    /* TODO: without the channel feature connect the child to /dev/null? */
+    /* Open pipes for stdin, stdout, stderr. */
+    if (use_file_for_in)
     {
-	job->jv_status = JOB_FAILED;
+	char_u *fname = options->jo_io_name[PART_IN];
+
+	fd_in[0] = mch_open((char *)fname, O_RDONLY, 0);
+	if (fd_in[0] < 0)
+	{
+	    EMSG2(_(e_notopen), fname);
+	    goto failed;
+	}
     }
-    else if (pid == 0)
+    else if (!use_null_for_in && pipe(fd_in) < 0)
+	goto failed;
+
+    if (use_file_for_out)
     {
+	char_u *fname = options->jo_io_name[PART_OUT];
+
+	fd_out[1] = mch_open((char *)fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd_out[1] < 0)
+	{
+	    EMSG2(_(e_notopen), fname);
+	    goto failed;
+	}
+    }
+    else if (!use_null_for_out && pipe(fd_out) < 0)
+	goto failed;
+
+    if (use_file_for_err)
+    {
+	char_u *fname = options->jo_io_name[PART_ERR];
+
+	fd_err[1] = mch_open((char *)fname, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	if (fd_err[1] < 0)
+	{
+	    EMSG2(_(e_notopen), fname);
+	    goto failed;
+	}
+    }
+    else if (!use_out_for_err && !use_null_for_err && pipe(fd_err) < 0)
+	goto failed;
+
+    if (!use_null_for_in || !use_null_for_out || !use_null_for_err)
+    {
+	channel = add_channel();
+	if (channel == NULL)
+	    goto failed;
+    }
+# endif
+
+    pid = fork();	/* maybe we should use vfork() */
+    if (pid  == -1)
+    {
+	/* failed to fork */
+	goto failed;
+    }
+
+    if (pid == 0)
+    {
+# ifdef FEAT_CHANNEL
+	int		null_fd = -1;
+# endif
+
 	/* child */
 	reset_signals();		/* handle signals normally */
 
@@ -5043,18 +5140,124 @@ mch_start_job(char **argv, job_T *job)
 	(void)setsid();
 # endif
 
+	set_child_environment();
+
+	/* TODO: re-enable this when pipes connect without a channel */
+# ifdef FEAT_CHANNEL
+	if (use_null_for_in || use_null_for_out || use_null_for_err)
+	    null_fd = open("/dev/null", O_RDWR | O_EXTRA, 0);
+
+	/* set up stdin for the child */
+	if (use_null_for_in)
+	{
+	    close(0);
+	    ignored = dup(null_fd);
+	}
+	else
+	{
+	    if (!use_file_for_in)
+		close(fd_in[1]);
+	    close(0);
+	    ignored = dup(fd_in[0]);
+	    close(fd_in[0]);
+	}
+
+	/* set up stderr for the child */
+	if (use_null_for_err)
+	{
+	    close(2);
+	    ignored = dup(null_fd);
+	}
+	else if (use_out_for_err)
+	{
+	    close(2);
+	    ignored = dup(fd_out[1]);
+	}
+	else
+	{
+	    if (!use_file_for_err)
+		close(fd_err[0]);
+	    close(2);
+	    ignored = dup(fd_err[1]);
+	    close(fd_err[1]);
+	}
+
+	/* set up stdout for the child */
+	if (use_null_for_out)
+	{
+	    close(0);
+	    ignored = dup(null_fd);
+	}
+	else
+	{
+	    if (!use_file_for_out)
+		close(fd_out[0]);
+	    close(1);
+	    ignored = dup(fd_out[1]);
+	    close(fd_out[1]);
+	}
+	if (null_fd >= 0)
+	    close(null_fd);
+# endif
+
 	/* See above for type of argv. */
 	execvp(argv[0], argv);
 
 	perror("executing job failed");
 	_exit(EXEC_FAILED);	    /* exec failed, return failure code */
     }
-    else
+
+    /* parent */
+    job->jv_pid = pid;
+    job->jv_status = JOB_STARTED;
+# ifdef FEAT_CHANNEL
+    job->jv_channel = channel;
+# endif
+
+# ifdef FEAT_CHANNEL
+    /* child stdin, stdout and stderr */
+    if (!use_file_for_in)
+	close(fd_in[0]);
+    if (!use_file_for_out)
+	close(fd_out[1]);
+    if (!use_out_for_err && !use_file_for_err)
+	close(fd_err[1]);
+    if (channel != NULL)
     {
-	/* parent */
-	job->jv_pid = pid;
-	job->jv_status = JOB_STARTED;
+	channel_set_pipes(channel,
+		      use_file_for_in || use_null_for_in
+						      ? INVALID_FD : fd_in[1],
+		      use_file_for_out || use_null_for_out
+						     ? INVALID_FD : fd_out[0],
+		      use_out_for_err || use_file_for_err || use_null_for_err
+						    ? INVALID_FD : fd_err[0]);
+	channel_set_job(channel, job, options);
+#  ifdef FEAT_GUI
+	channel_gui_register(channel);
+#  endif
     }
+# endif
+
+    /* success! */
+    return;
+
+failed: ;
+# ifdef FEAT_CHANNEL
+    if (channel != NULL)
+	channel_free(channel);
+    if (fd_in[0] >= 0)
+	close(fd_in[0]);
+    if (fd_in[1] >= 0)
+	close(fd_in[1]);
+    if (fd_out[0] >= 0)
+	close(fd_out[0]);
+    if (fd_out[1] >= 0)
+	close(fd_out[1]);
+    if (fd_err[0] >= 0)
+	close(fd_err[0]);
+    if (fd_err[1] >= 0)
+	close(fd_err[1]);
+# endif
 }
 
     char *
@@ -5087,28 +5290,58 @@ mch_job_status(job_T *job)
 	job->jv_status = JOB_ENDED;
 	return "dead";
     }
+    if (WIFSIGNALED(status))
+    {
+	job->jv_exitval = -1;
+	job->jv_status = JOB_ENDED;
+	return "dead";
+    }
     return "run";
 }
 
     int
 mch_stop_job(job_T *job, char_u *how)
 {
-    int sig = -1;
+    int	    sig = -1;
+    pid_t   job_pid;
 
-    if (STRCMP(how, "hup") == 0)
-	sig = SIGHUP;
-    else if (*how == NUL || STRCMP(how, "term") == 0)
+    if (*how == NUL || STRCMP(how, "term") == 0)
 	sig = SIGTERM;
+    else if (STRCMP(how, "hup") == 0)
+	sig = SIGHUP;
     else if (STRCMP(how, "quit") == 0)
 	sig = SIGQUIT;
+    else if (STRCMP(how, "int") == 0)
+	sig = SIGINT;
     else if (STRCMP(how, "kill") == 0)
 	sig = SIGKILL;
     else if (isdigit(*how))
 	sig = atoi((char *)how);
     else
 	return FAIL;
-    kill(job->jv_pid, sig);
+
+    /* TODO: have an option to only kill the process, not the group? */
+    job_pid = job->jv_pid;
+    if (job_pid == getpgid(job_pid))
+	job_pid = -job_pid;
+
+    kill(job_pid, sig);
+
     return OK;
+}
+
+/*
+ * Clear the data related to "job".
+ */
+    void
+mch_clear_job(job_T *job)
+{
+    /* call waitpid because child process may become zombie */
+# ifdef __NeXT__
+    (void)wait4(job->jv_pid, NULL, WNOHANG, (struct rusage *)0);
+# else
+    (void)waitpid(job->jv_pid, NULL, WNOHANG);
+# endif
 }
 #endif
 
@@ -5210,18 +5443,18 @@ WaitForChar(long msec)
  * "msec" == 0 will check for characters once.
  * "msec" == -1 will block until a character is available.
  * When a GUI is being used, this will not be used for input -- webb
- * Returns also, when a request from Sniff is waiting -- toni.
  * Or when a Linux GPM mouse event is waiting.
  * Or when a clientserver message is on the queue.
  */
 #if defined(__BEOS__)
     int
 #else
-    static  int
+    static int
 #endif
 RealWaitForChar(int fd, long msec, int *check_for_gpm UNUSED)
 {
     int		ret;
+    int		result;
 #if defined(FEAT_XCLIPBOARD) || defined(USE_XSMP) || defined(FEAT_MZSCHEME)
     static int	busy = FALSE;
 
@@ -5296,15 +5529,6 @@ RealWaitForChar(int fd, long msec, int *check_for_gpm UNUSED)
 	fds[0].events = POLLIN;
 	nfd = 1;
 
-# ifdef FEAT_SNIFF
-#  define SNIFF_IDX 1
-	if (want_sniff_request)
-	{
-	    fds[SNIFF_IDX].fd = fd_from_sniff;
-	    fds[SNIFF_IDX].events = POLLIN;
-	    nfd++;
-	}
-# endif
 # ifdef FEAT_XCLIPBOARD
 	may_restore_clipboard();
 	if (xterm_Shell != (Widget)0)
@@ -5338,23 +5562,15 @@ RealWaitForChar(int fd, long msec, int *check_for_gpm UNUSED)
 #endif
 
 	ret = poll(fds, nfd, towait);
+
+	result = ret > 0 && (fds[0].revents & POLLIN);
+
 # ifdef FEAT_MZSCHEME
 	if (ret == 0 && mzquantum_used)
 	    /* MzThreads scheduling is required and timeout occurred */
 	    finished = FALSE;
 # endif
 
-# ifdef FEAT_SNIFF
-	if (ret < 0)
-	    sniff_disconnect(1);
-	else if (want_sniff_request)
-	{
-	    if (fds[SNIFF_IDX].revents & POLLHUP)
-		sniff_disconnect(1);
-	    if (fds[SNIFF_IDX].revents & POLLIN)
-		sniff_request_waiting = 1;
-	}
-# endif
 # ifdef FEAT_XCLIPBOARD
 	if (xterm_Shell != (Widget)0 && (fds[xterm_idx].revents & POLLIN))
 	{
@@ -5440,15 +5656,6 @@ select_eintr:
 # endif
 	maxfd = fd;
 
-# ifdef FEAT_SNIFF
-	if (want_sniff_request)
-	{
-	    FD_SET(fd_from_sniff, &rfds);
-	    FD_SET(fd_from_sniff, &efds);
-	    if (maxfd < fd_from_sniff)
-		maxfd = fd_from_sniff;
-	}
-# endif
 # ifdef FEAT_XCLIPBOARD
 	may_restore_clipboard();
 	if (xterm_Shell != (Widget)0)
@@ -5485,6 +5692,10 @@ select_eintr:
 # endif
 
 	ret = select(maxfd + 1, &rfds, NULL, &efds, tvp);
+	result = ret > 0 && FD_ISSET(fd, &rfds);
+	if (result)
+	    --ret;
+
 # ifdef EINTR
 	if (ret == -1 && errno == EINTR)
 	{
@@ -5514,17 +5725,6 @@ select_eintr:
 	    finished = FALSE;
 # endif
 
-# ifdef FEAT_SNIFF
-	if (ret < 0 )
-	    sniff_disconnect(1);
-	else if (ret > 0 && want_sniff_request)
-	{
-	    if (FD_ISSET(fd_from_sniff, &efds))
-		sniff_disconnect(1);
-	    if (FD_ISSET(fd_from_sniff, &rfds))
-		sniff_request_waiting = 1;
-	}
-# endif
 # ifdef FEAT_XCLIPBOARD
 	if (ret > 0 && xterm_Shell != (Widget)0
 		&& FD_ISSET(ConnectionNumber(xterm_dpy), &rfds))
@@ -5605,7 +5805,7 @@ select_eintr:
 #endif
     }
 
-    return (ret > 0);
+    return result;
 }
 
 #ifndef NO_EXPANDPATH
@@ -6357,14 +6557,14 @@ have_dollars(int num, char_u **file)
 }
 #endif	/* ifndef __EMX__ */
 
-#ifndef HAVE_RENAME
+#if !defined(HAVE_RENAME) || defined(PROTO)
 /*
  * Scaled-down version of rename(), which is missing in Xenix.
  * This version can only move regular files and will fail if the
  * destination exists.
  */
     int
-mch_rename(const char *src, *dest)
+mch_rename(const char *src, const char *dest)
 {
     struct stat	    st;
 

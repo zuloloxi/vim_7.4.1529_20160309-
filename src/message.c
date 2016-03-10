@@ -15,10 +15,6 @@
 
 #include "vim.h"
 
-#if defined(FEAT_FLOAT) && defined(HAVE_MATH_H)
-# include <math.h>
-#endif
-
 static int other_sourcing_name(void);
 static char_u *get_emsg_source(void);
 static char_u *get_emsg_lnum(void);
@@ -531,7 +527,8 @@ emsg(char_u *s)
 	return TRUE;
 
     called_emsg = TRUE;
-    ex_exitval = 1;
+    if (emsg_silent == 0)
+	ex_exitval = 1;
 
     /*
      * If "emsg_severe" is TRUE: When an error exception is to be thrown,

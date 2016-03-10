@@ -466,9 +466,6 @@ CClink = $(CC)
 # Uncomment this when you do not want inter process communication.
 #CONF_OPT_CHANNEL = --disable-channel
 
-# SNIFF - Include support for SNiFF+.
-#CONF_OPT_SNIFF = --enable-sniff
-
 # MULTIBYTE - To edit multi-byte characters.
 # Uncomment this when you want to edit a multibyte language.
 # It's automatically enabled with normal features, GTK or IME support.
@@ -908,7 +905,7 @@ SANITIZER_LIBS = $(SANITIZER_CFLAGS)
 ### after changing this, you need to do "make reconfig".
 #CONF_TERM_LIB = --with-tlib=ncurses
 
-### For GCC on MSDOS, the ".exe" suffix will be added.
+### For GCC on MS-Windows, the ".exe" suffix will be added.
 #EXEEXT = .exe
 #LNKEXT = .exe
 
@@ -1336,7 +1333,7 @@ CARBONGUI_TESTARG = VIMPROG=../$(APPDIR)/Contents/MacOS/$(VIMTARGET)
 
 # All GUI files
 ALL_GUI_SRC  = gui.c gui_gtk.c gui_gtk_f.c gui_motif.c gui_xmdlg.c gui_xmebw.c gui_athena.c gui_gtk_x11.c gui_x11.c gui_at_sb.c gui_at_fs.c pty.c
-ALL_GUI_PRO  = gui.pro gui_gtk.pro gui_motif.pro gui_xmdlg.pro gui_athena.pro gui_gtk_x11.pro gui_x11.pro gui_w16.pro gui_w32.pro gui_photon.pro
+ALL_GUI_PRO  = gui.pro gui_gtk.pro gui_motif.pro gui_xmdlg.pro gui_athena.pro gui_gtk_x11.pro gui_x11.pro gui_w32.pro gui_photon.pro
 
 # }}}
 
@@ -1391,7 +1388,7 @@ OSDEF_CFLAGS = $(PRE_DEFS) $(POST_DEFS)
 
 LINT_CFLAGS = -DLINT -I. $(PRE_DEFS) $(POST_DEFS) $(RUBY_CFLAGS) $(LUA_CFLAGS) $(PERL_CFLAGS) $(PYTHON_CFLAGS) $(PYTHON3_CFLAGS) $(TCL_CFLAGS) -Dinline= -D__extension__= -Dalloca=alloca
 
-LINT_EXTRA = -DUSE_SNIFF -DHANGUL_INPUT -D"__attribute__(x)="
+LINT_EXTRA = -DHANGUL_INPUT -D"__attribute__(x)="
 
 DEPEND_CFLAGS = -DPROTO -DDEPEND -DFEAT_GUI $(LINT_CFLAGS)
 
@@ -1532,14 +1529,13 @@ SRC =	$(BASIC_SRC) \
 	$(PYTHON_SRC) $(PYTHON3_SRC) \
 	$(TCL_SRC) \
 	$(RUBY_SRC) \
-	$(SNIFF_SRC) \
 	$(WORKSHOP_SRC) \
 	$(WSDEBUG_SRC)
 
 TAGS_SRC = *.c *.cpp if_perl.xs
 
 EXTRA_SRC = hangulin.c if_lua.c if_mzsch.c auto/if_perl.c if_perlsfio.c \
-	    if_python.c if_python3.c if_tcl.c if_ruby.c if_sniff.c \
+	    if_python.c if_python3.c if_tcl.c if_ruby.c \
 	    gui_beval.c workshop.c wsdebug.c integration.c \
 	    netbeans.c channel.c \
 	    $(GRESOURCE_SRC)
@@ -1561,7 +1557,7 @@ ALL_SRC = $(BASIC_SRC) $(ALL_GUI_SRC) $(UNITTEST_SRC) $(EXTRA_SRC)
 # The perl sources also don't work well with lint.
 LINT_SRC = $(BASIC_SRC) $(GUI_SRC) $(HANGULIN_SRC) \
 	   $(PYTHON_SRC) $(PYTHON3_SRC) $(TCL_SRC) \
-	   $(SNIFF_SRC) $(WORKSHOP_SRC) $(WSDEBUG_SRC) \
+	   $(WORKSHOP_SRC) $(WSDEBUG_SRC) \
 	   $(NETBEANS_SRC) $(CHANNEL_SRC)
 #LINT_SRC = $(SRC)
 #LINT_SRC = $(ALL_SRC)
@@ -1611,7 +1607,6 @@ OBJ_COMMON = \
 	objects/sha256.o \
 	objects/spell.o \
 	objects/syntax.o \
-	$(SNIFF_OBJ) \
 	objects/tag.o \
 	objects/term.o \
 	objects/ui.o \
@@ -1715,7 +1710,7 @@ PRO_AUTO = \
 # Resources used for the Mac are in one directory.
 RSRC_DIR = os_mac_rsrc
 
-PRO_MANUAL = os_amiga.pro os_msdos.pro os_win16.pro os_win32.pro \
+PRO_MANUAL = os_amiga.pro os_win32.pro \
 	os_mswin.pro winclip.pro os_beos.pro os_vms.pro $(PERL_PRO)
 
 # Default target is making the executable and tools
@@ -1750,7 +1745,7 @@ config auto/config.mk: auto/configure config.mk.in config.h.in
 		$(CONF_OPT_TCL) $(CONF_OPT_RUBY) $(CONF_OPT_NLS) \
 		$(CONF_OPT_CSCOPE) $(CONF_OPT_MULTIBYTE) $(CONF_OPT_INPUT) \
 		$(CONF_OPT_OUTPUT) $(CONF_OPT_GPM) $(CONF_OPT_WORKSHOP) \
-		$(CONF_OPT_SNIFF) $(CONF_OPT_FEAT) $(CONF_TERM_LIB) \
+		$(CONF_OPT_FEAT) $(CONF_TERM_LIB) \
 		$(CONF_OPT_COMPBY) $(CONF_OPT_ACL) $(CONF_OPT_NETBEANS) \
 		$(CONF_OPT_CHANNEL) \
 		$(CONF_ARGS) $(CONF_OPT_MZSCHEME) $(CONF_OPT_PLTHOME) \
@@ -1836,7 +1831,7 @@ update-po:
 # Generate function prototypes.  This is not needed to compile vim, but if
 # you want to use it, cproto is out there on the net somewhere -- Webb
 #
-# When generating os_amiga.pro, os_msdos.pro and os_win32.pro there will be a
+# When generating os_amiga.pro and os_win32.pro there will be a
 # few include files that can not be found, that's OK.
 
 proto: $(PRO_AUTO) $(PRO_MANUAL)
@@ -1864,24 +1859,16 @@ os_amiga.pro: os_amiga.c
 	$(CPROTO) -DAMIGA -UHAVE_CONFIG_H -DBPTR=char* $< > proto/$@
 	echo "/* vim: set ft=c : */" >> proto/$@
 
-os_msdos.pro: os_msdos.c
-	$(CPROTO) -DMSDOS -UHAVE_CONFIG_H $< > proto/$@
-	echo "/* vim: set ft=c : */" >> proto/$@
-
-os_win16.pro: os_win16.c
-	$(CPROTO) -DWIN16 -UHAVE_CONFIG_H $< > proto/$@
-	echo "/* vim: set ft=c : */" >> proto/$@
-
 os_win32.pro: os_win32.c
 	$(CPROTO) -DWIN32 -UHAVE_CONFIG_H $< > proto/$@
 	echo "/* vim: set ft=c : */" >> proto/$@
 
 os_mswin.pro: os_mswin.c
-	$(CPROTO) -DWIN16 -DWIN32 -UHAVE_CONFIG_H $< > proto/$@
+	$(CPROTO) -DWIN32 -UHAVE_CONFIG_H $< > proto/$@
 	echo "/* vim: set ft=c : */" >> proto/$@
 
 winclip.pro: winclip.c
-	$(CPROTO) -DWIN16 -DWIN32 -UHAVE_CONFIG_H $< > proto/$@
+	$(CPROTO) -DWIN32 -UHAVE_CONFIG_H $< > proto/$@
 	echo "/* vim: set ft=c : */" >> proto/$@
 
 os_beos.pro: os_beos.c
@@ -2025,6 +2012,7 @@ test_arglist \
 	test_menu \
 	test_perl \
 	test_quickfix \
+	test_reltime \
 	test_searchpos \
 	test_set \
 	test_sort \
@@ -2822,9 +2810,6 @@ objects/if_python3.o: if_python3.c if_py_both.h
 objects/if_ruby.o: if_ruby.c
 	$(CCC) $(RUBY_CFLAGS) -o $@ if_ruby.c
 
-objects/if_sniff.o: if_sniff.c
-	$(CCC) -o $@ if_sniff.c
-
 objects/if_tcl.o: if_tcl.c
 	$(CCC) $(TCL_CFLAGS) -o $@ if_tcl.c
 
@@ -3371,10 +3356,6 @@ objects/if_ruby.o: if_ruby.c auto/config.h vim.h feature.h os_unix.h auto/osdef.
  ascii.h keymap.h term.h macros.h option.h structs.h regexp.h gui.h \
  gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h proto.h globals.h \
  farsi.h arabic.h version.h
-objects/if_sniff.o: if_sniff.c vim.h auto/config.h feature.h os_unix.h \
- auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
- regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h proto.h \
- globals.h farsi.h arabic.h os_unixx.h
 objects/gui_beval.o: gui_beval.c vim.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
  regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h proto.h \

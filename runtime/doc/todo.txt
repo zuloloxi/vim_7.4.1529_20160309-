@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 7.4.  Last change: 2016 Feb 07
+*todo.txt*      For Vim version 7.4.  Last change: 2016 Mar 07
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -33,6 +33,96 @@ not be repeated below, unless there is extra information.
 
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
+
++channel:
+- move code from eval.c to channel.c
+- implement TODO items in ":help channel":
+   - job_start() options:
+	in-io: null, in-buf
+	out-io: null, file, out-buf
+	err-io: null, file (err-name), buffer (err-buf)
+	existing channel to use
+   - job_maystart()
+   - add job_info(): process ID, run/dead, etc.
+   - add ch_info(): in/out/err mode, timeout, callbacks, etc.
+- Move more details from eval.txt to channel.txt.  Add tags in eval.txt.
+- When receiving malformed json starting with a quote it doesn't get
+  discarded.  Any invalid JSON or JSON that isn't a list will block further
+  parsing?
+- When decoding json, don't read all the typeahead at once, use the reader
+  properly.
+- When a message in the queue but there is no callback, drop it after a while?
+  Add timestamp to queued messages and callbacks with ID, remove after a
+  minute.
+- Add more log calls, basically at every branch, before every callback, etc.
+- add remark about undo sync, is there a way to force it?
+- When starting a job, have an option to open the server socket, so we know
+  the port, and pass it to the command with --socket-fd {nr}. (Olaf Dabrunz,
+  Feb 9)  How to do this on MS-Windows?
+- Add more unit-testing in json_test.c
+- Add a test where ["eval","getline(123)"] gets a line with special
+  characters (NUL, 0x80, etc.).  Check that it isn't garbled.
+- make sure errors lead to a useful error msg. ["ex","foobar"]
+- For connection to server, a "keep open" flag would be useful.  Retry
+  connecting in the main loop with zero timeout.
+Later
+- job_start(): run job in a newly opened terminal.
+    With xterm could use -S{pty}.
+
+emoji patch from Yasuhiro Matsumoto.  Asked Thomas Dickey.
+
+Packages:
+- Add command to update help tags in 'runtimepath'.  Pathogen has something
+  like that.
+- colorscheme command in .vimrc doesn't work.
+   - Postpone until later?
+   - Also search in 'packpath'?
+   - command to load packages now?
+
+More plugin support:
+- Have a way to install a callback from the main loop.  Called every second or
+  so.
+- Need way to uniquely identify a window, no matter how windows are
+  rearranged.  Same for tab pages.
+      getwinid()             ID of current winow
+      getwinid({nr})         ID of window {nr}
+      getwinid({nr}, {tab})  ID of window {nr} in tab page {tab}
+      getwinnr({id})	     window nr of {id} or -1 if not open
+      gettabnr({id})	     tab page nr of {id} or -1 if not open
+      gotowin({id})
+  Make it so that the window ID can be used where currently a window nr is used
+  Patch from Anton Lindqvist, 2016 Feb 21, to make bufwinnr() return a list.
+  Perhaps add bufwinid() instead.
+
+This difference is unexpected:
+    echo v:true == 1
+    1
+    echo [v:true] == [1]
+    0
+It's because tv_equal() works different.
+
+Compiler warnings. (John Marriott, Feb 17)
+
+Compiler warnings in if_ole.cpp.  Patch by Ken Takata, Feb 18.
+
+When running "make install" don't overwrite the doc/tags file, generate it
+elsewhere, so that the distributed file doesn't change.
+
+Fix to support --nofork for Windows batch files. (Kevin Cantú, 2016 Feb 23,
+#658, #659)  Also add "setlocal" at top of batch file?
+
+Patch to add matchstrpos(). (Ozaki Kiichi, 2016 Feb 28)
+
+Why does this: 	echo "a" . 1.1
+result in:	a11
+Should recognize float (so long as it's not ".1.1").
+
+Allow for an empty dictionary key?
+
+Patch to improve I/O for Perl. (Damien, 2016 Jan 9, update Jan 22 2nd one)
+
+Patch to fix ml_get error. (Alexander Freiherr von Buddenbrock, 2016 Mar 4,
+#676)
 
 Regexp problems:
 - The regexp engines are not reentrant, causing havoc when interrupted by a
@@ -76,67 +166,41 @@ Regexp problems:
   matches the empty string. (Dominique Pelle, 2015 Oct 2, Nov 24)
 - Search for \\~ causes error E874.
 
-- "\%1l^#.*" does not match on a line starting with "#".  The zero-width match
-  clears the start-of-line flag.
-  Patch by Christian, 2016 Jan 29.
+Patch to fix that folds close with autocomplete.  #643
+Christian Brabandt, 2016 Feb 18.
 
-+channel:
-- implement job control:
-	job argument: redirect stdin/stdout
-	job argument: killonexit
-	let job = job_maystart('command', {address}, {options})
-- When receiving malformed json starting with a quote it doesn't get
-  discarded.
-- add ch_status(): Whether channel is open.  Perhaps also mode, timeout.
-  When channel closes invoke channel callback.
-- add ch_setcallback()
-- add ch_settimeout()
-- cleanup on exit?  in mch_getout() and getout().
-- Add a test for the channel callback.
-- implement debug log
-- Add timestamp to queued messages and callbacks with ID, remove after a
-  minute.
-- add remark about undo sync, is there a way to force it?
-- Add more testing in json_test.c
-- make sure errors lead to a useful error msg. ["ex","foobar"]
-- json: implement UTF-16 surrogate pair.
-- Need way to uniquely identify a window, no matter how windows are
-  rearranged.  Same for tab pages.
-      getwinid()             ID of current winow
-      getwinid({nr})         ID of window {nr}
-      getwinid({nr}, {tab})  ID of window {nr} in tab page {tab}
-      getwinnr({id})	     window nr of {id} or -1 if not open
-      gettabnr({id})	     tab page nr of {id} or -1 if not open
-      gotowin({id})
-  Make it so that the window ID can be used where currently a window nr is used
-- For connection to server, a "keep open" flag would be useful.  Retry
-  connecting in the main loop with zero timeout.
-
-Patch on #608: (Ken Takata)
-https://bitbucket.org/k_takata/vim-ktakata-mq/src/479934b94fd56b064c9e4bd8737585c5df69d56a/fix-gvimext-loadlibrary.patch?fileviewer=file-view-default
-
-This difference is unexpected:
-    echo v:true == 1
-    1
-    echo [v:true] == [1]
-    0
-It's because tv_equal() works different.
-
-Allow for an empty dictionary key.
+Also include update_curswant() fix for getcurpos(). (Christian Brabandt, 2016
+Feb 9)
 
 Patch to put undo options together in undo window.
 (Gary Johnson, 2016 Jan 28)
 
-Patch for clearing history. (Yegappan Lakshmanan, 2016 Jan 31, second message
-has tests)
+Patch to have better check for {action} argument of setqflist().
+Nikolai Pavlov, Feb 25, #661.  Can be even more strict.
+Also see patch from Hirohito Higash, Feb 25.
 
 Patch to update the GTK icon cache when installing. (Kazunobu Kuriyama, 2016
 Feb 3)
 
 Patch for test86 and test87. (Roland Puntaier, #622)
 
+We can use '. to go to the last change in the current buffer, but how about
+the last change in any buffer?  Can we use ', (, is next to .)?
+
 Patch for Python: #622. (Roland Puntaier, 2016 Feb 2)
 What does it change?
+
+Win32: patch to use 64 bit stat() if possible. (Ken Takata, 2014 May 12)
+More tests May 14. Update May 29.  Update Aug 10.
+Now part of large file patches. (Ken Takata, 2016 Feb 1)
+Two patches now?  New update Feb 24.
+
+Patch to support 64 bit ints for Number. (Ken Takata, 2016 Jan 21)
+Also in update of Feb 24?
+
+Patch to add setbufline(). (email from Yasuhiro Matsumoto, patch by Ozaki
+Kiichi, 2016 Feb 28)
+https://gist.github.com/ichizok/64bdc92aed19ec9001dd
 
 Need to try out instructions in INSSTALLpc.txt about how to install all
 interfaces and how to build Vim with them.
@@ -190,12 +254,7 @@ directory exists. (Sergio Gallelli, 2013 Dec 29)
 Patch to avoid redrawing tabline when the popup menu is visible.
 (Christian Brabandt, 2016 Jan 28)
 
-Win32: patch to use 64 bit stat() if possible. (Ken Takata, 2014 May 12)
-More tests May 14. Update May 29.  Update Aug 10.
-Now part of large file patches. (Ken Takata, 2016 Feb 1)
-Two patches now?
-
-Patch to support 64 bit ints for Number. (Ken Takata, 2016 Jan 21)
+Patch to add {skip} argument to search(). (Christian Brabandt, 2016 Feb 24)
 
 7   Add a watchpoint in the debug mode: An expression that breaks execution
     when evaluating to non-zero.  Add the "watchadd expr" command, stop when
@@ -221,7 +280,13 @@ Patch to fix display of listchars on the cursorline. (Nayuri Aohime, 2013)
 Update suggested by Yasuhiro Matsumoto, 2014 Nov 25:
 https://gist.github.com/presuku/d3d6b230b9b6dcfc0477
 
+Patch to make the behavior of "w" more straightforward, but not Vi compatible.
+With a 'cpo' flag.  (Christian Brabandt, 2016 Feb 8)
+
 Patch to add TagNotFound autocommand. (Anton Lindqvist, 2016 Feb 3)
+
+Patch to add Error autocommand. (Anton Lindqvist, 2016 Feb 17)
+Only remembers one error.
 
 Illegal memory access, requires ASAN to see. (Dominique Pelle, 2015 Jul 28)
 
@@ -262,6 +327,9 @@ Half-finished patch to fix the Problem using cgn to change a search hit when
 replacement includes hit. Reported by John Beckett, fix by Christian Brabandt,
 2016 Jan 11.
 
+Patch to add :mapgroup, put mappings in a group like augroup.
+(Yasuhiro Matsumoto, 2016 Feb 19)
+
 Value returned by virtcol() changes depending on how lines wrap.  This is
 inconsistent with the documentation.
 
@@ -271,14 +339,12 @@ Can we cache the syntax attributes, so that updates for 'relativenumber' and
 Build with Python on Mac does not always use the right library.
 (Kazunobu Kuriyama, 2015 Mar 28)
 
-Patch to add GTK 3 support. (Kazunobu Kuriyama, 2016 Feb 6)
-Does not fully work yet.
-
 Need a Vim equivalent of Python's None and a way to test for it.
 Use v:none.  var == v:none
 
 Patch to add arguments to argc() and argv(). (Yegappan Lakshmanan, 2016 Jan
 24)  Also need a way to get the global arg list?  Update later on Jan 24
+Update Mar 5.
 
 To support Thai (and other languages) word boundaries, include the ICU
 library:  http://userguide.icu-project.org/boundaryanalysis
@@ -328,8 +394,6 @@ Patch to add GUI colors to the terminal, when it supports it. (ZyX, 2013 Jan
 
 Patch for problem with restoring screen on Windows. (Nobuhiro Takasaki, 2015
 Sep 10)
-
-Patch to improve I/O for Perl. (Damien, 2015 Jan 9, update Jan 22 2nd one)
 
 Patch to set antialiasing style on Windows. (Ondrej Balaz, 2013 Mar 14)
 Needs a different check for CLEARTYPE_QUALITY.
@@ -497,7 +561,7 @@ Bug: Autocompleting ":tag/pat" replaces "/pat" with a match but does not
 insert a space. (Micha Mos, 2014 Nov 7)
 
 Patch to add the :bvimgrep command.  (Christian Brabandt, 2014 Nov 12)
-Update Dec 6.
+Updated 2016 Feb 10
 
 Patch to add argument to :cquit. (Thinca, 2014 Oct 12)
 
@@ -1512,8 +1576,6 @@ still delete them.  Also convert all buffer file names?
 
 Update src/testdir/main.aap.
 
-"vim -c 'sniff connect'" hangs Vim. (Dominique Pelle, 2008 Dec 7)
-
 Something wrong with session that has "cd" commands and "badd", in such a way
 that Vim doesn't find the edited file in the buffer list, causing the
 ATTENTION message?  (Tony Mechelynck, 2008 Dec 1)
@@ -1698,9 +1760,6 @@ Fail to edit file after failed register access.  Error flag remains set?
 
 Patch for redo register. (Ben Schmidt, 2007 Oct 19)
 Await response to question to make the register writable.
-
-src/testdir/Make_dos.mak: not all tests are included, e.g., test49, without a
-remark why.
 
 Problem with 'ts' set to 9 and 'showbreak' to ">>>". (Matthew Winn, 2007 Oct
 1)
@@ -2669,64 +2728,7 @@ GUI:
     currently.  This is very obvious on a 66Mhz 486.
 
 
-MSDOS/DJGPP:
-9   Pressing CTRL-C often crashes the console Vim runs in. (Ken Liao)
-    When 'bioskey' isn't set it doesn't happen.  Could be a problem with the
-    BIOS emulation of the console.  Version 5.6 already had this problem.
-8   DJGPP: "cd c:" can take us to a directory that no longer exists.
-    change_drive() doesn't check this.  How to check for this error?
-9   The 16 bit version runs out of memory very quickly.  Should find unused
-    code and reduce static data.  Resetting 'writebackup' helps to be able to
-    write a file.
-9   Crash when running on Windows 98 in a console window and pressing CTRL-C.
-    Happens now and then.  When debugging Vim in gdb this also happens.  Since
-    the console crashes, might be a bug in the DOS console.  Resetting
-    'bioskey' avoids it, but then CTRL-C doesn't work.
-9   DOS: Make CTRL-Fx and ALT-Fx work.
-    CTRL-F1 = CE-5E, CTRL-F2 = CE-5F, .., CTRL-F10 = CE-67
-    ALT-F1 = CE-68, ALT-F2 = CE-69, .., ALT-F10 = CE-71
-    Shifted cursor keys produce same codes as unshifted keys.  Use bioskey(2)
-    to get modifier mask for <S-C-M-Fx>.
-    Use K_SPECIAL/KS_MODIFIER codes to insert modifier mask in input stream?
-    Make this work like in Win32 console.
-    Mapping things like <M-A> doesn't work, because it generates an extended
-    key code.  Use a translation table?
-9   Can't read an opened swap file when the "share" command has not been used.
-    At least ignore the swap files that Vim has opened itself.
-8   Use DJGPP 2.03.
-8   The Dos32 version (DJGPP) can't use long file names on Windows NT.
-    Check if new package can be used (v2misc/ntlfn08[bs].zip).
-8   setlocale() is bogus.
-8   Vim busy waits for new characters or mouse clicks.	Should put in some
-    sort of sleep, to avoid eating 50% of the CPU time.  Test on an unpatched
-    Windows 95 system!
-8   DJGPP: when shell is bash, make fails. (Donahoe)
-7   Hitting CTRL-P twice quickly (e.g., in keyword completion) on a 8088
-    machine, starts printer echo! (John Mullin).
-7   MSDOS 16 bit version can't work with COMSPEC that has an argument, e.g.:
-    COMSPEC=C:\WINDOWS\COMMAND.COM /E:4096    (Bradley)
-    Caused by BCC system() function (Borland "make" has the same problem).
-8   Mouse: handle left&right button pressed as middle button pressed.  Add
-    modifier keys shift, ctrl and alt.
-7   When too many files are open (depends on FILES), strange things happen.
-    The Dos16 version runs out of memory, in the Dos32 version "!ls" causes a
-    crash.  Another symptom: .swp files are not deleted, existing files are
-    "[New file]".
-7   DJGPP version doesn't work with graphics display mode.  Switch to a mode
-    that is supported?
-8   DJGPP: ":mode" doesn't work for many modes.  Disable them.
-8   DJGPP: When starting in Ex mode, shouldn't clear the screen. (Walter
-    Briscoe)
-
-
-MSDOS, OS/2 and Win32:
-8   OS/2: Add backtick expansion.  Undefine NO_EXPANDPATH and use
-    gen_expand_wildcards().
-8   OS/2: Add clipboard support?  See example clipbrd.exe from Alexander
-    Wagner.
-8   OS/2: Add Extended Attributes support and define HAVE_ACL.
-8   OS/2: When editing a file name "foo.txt" that is actually called FOO.txt,
-    writing uses "foo.txt".  Should obtain the real file name.
+Win32 console:
 8   Should $USERPROFILE be preferred above $HOMEDRIVE/$HOMEPATH?  No, but it's
     a good fallback, thus use:
 	    $HOME

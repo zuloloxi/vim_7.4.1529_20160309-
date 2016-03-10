@@ -19,7 +19,7 @@
  */
 EXTERN long	Rows			/* nr of rows in the screen */
 #ifdef DO_INIT
-# if defined(MSDOS) || defined(WIN3264)
+# if defined(WIN3264)
 			    = 25L
 # else
 			    = 24L
@@ -948,9 +948,6 @@ EXTERN int	ctrl_x_mode INIT(= 0);	/* Which Ctrl-X mode are we in? */
 #endif
 
 EXTERN int	no_abbr INIT(= TRUE);	/* TRUE when no abbreviations loaded */
-#ifdef MSDOS
-EXTERN int	beep_count INIT(= 0);	/* nr of beeps since last char typed */
-#endif
 
 #ifdef USE_EXE_NAME
 EXTERN char_u	*exe_name;		/* the name of the executable */
@@ -1580,6 +1577,7 @@ EXTERN char_u e_notset[]	INIT(= N_("E764: Option '%s' is not set"));
 #ifndef FEAT_CLIPBOARD
 EXTERN char_u e_invalidreg[]    INIT(= N_("E850: Invalid register name"));
 #endif
+EXTERN char_u e_dirnotf[]	INIT(= N_("E919: Directory not found in '%s': \"%s\""));
 
 #ifdef MACOS_X_UNIX
 EXTERN short disallow_gui	INIT(= FALSE);
@@ -1621,6 +1619,8 @@ EXTERN alloc_id_T  alloc_fail_id INIT(= aid_none);
 EXTERN int  alloc_fail_countdown INIT(= -1);
 /* set by alloc_fail(), number of times alloc() returns NULL */
 EXTERN int  alloc_fail_repeat INIT(= 0);
+
+EXTERN int  disable_char_avail_for_testing INIT(= 0);
 #endif
 
 /*

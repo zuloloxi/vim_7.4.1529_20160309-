@@ -1338,12 +1338,6 @@ bt_regcomp(char_u *expr, int re_flags)
     if (reg(REG_NOPAREN, &flags) == NULL)
 	return NULL;
 
-    /* Small enough for pointer-storage convention? */
-#ifdef SMALL_MALLOC		/* 16 bit storage allocation */
-    if (regsize >= 65536L - 256L)
-	EMSG_RET_NULL(_("E339: Pattern too long"));
-#endif
-
     /* Allocate space. */
     r = (bt_regprog_T *)lalloc(sizeof(bt_regprog_T) + regsize, TRUE);
     if (r == NULL)
@@ -1499,6 +1493,10 @@ vim_regcomp_had_eol(void)
     return had_eol;
 }
 #endif
+
+/* variables for parsing reginput */
+static int	at_start;	/* True when on the first character */
+static int	prev_at_start;  /* True when on the second character */
 
 /*
  * Parse regular expression, i.e. main body or parenthesized thing.
@@ -1918,6 +1916,7 @@ regatom(int *flagp)
     int		    c;
     char_u	    *p;
     int		    extra = 0;
+    int		    save_prev_at_start = prev_at_start;
 
     *flagp = WORST;		/* Tentatively. */
 
@@ -2331,7 +2330,11 @@ regatom(int *flagp)
 			      else if (c == 'l' || c == 'c' || c == 'v')
 			      {
 				  if (c == 'l')
+				  {
 				      ret = regnode(RE_LNUM);
+				      if (save_prev_at_start)
+					  at_start = TRUE;
+				  }
 				  else if (c == 'c')
 				      ret = regnode(RE_COL);
 				  else
@@ -2946,10 +2949,6 @@ regoptail(char_u *p, char_u *val)
 /*
  * Functions for getting characters from the regexp input.
  */
-
-static int	at_start;	/* True when on the first character */
-static int	prev_at_start;  /* True when on the second character */
-
 /*
  * Start parsing at "str".
  */

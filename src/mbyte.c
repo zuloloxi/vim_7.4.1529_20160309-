@@ -109,7 +109,11 @@
 #endif
 
 #if defined(FEAT_GUI_GTK) && defined(FEAT_XIM)
-# include <gdk/gdkkeysyms.h>
+# if GTK_CHECK_VERSION(3,0,0)
+#  include <gdk/gdkkeysyms-compat.h>
+# else
+#  include <gdk/gdkkeysyms.h>
+# endif
 # ifdef WIN3264
 #  include <gdk/gdkwin32.h>
 # else
@@ -473,7 +477,7 @@ enc_canon_props(char_u *name)
 	CPINFO	cpinfo;
 
 	/* Get info on this codepage to find out what it is. */
-	if (GetCPInfo(atoi(name + 2), &cpinfo) != 0)
+	if (GetCPInfo(atoi((char *)name + 2), &cpinfo) != 0)
 	{
 	    if (cpinfo.MaxCharSize == 1) /* some single-byte encoding */
 		return ENC_8BIT;
@@ -535,7 +539,7 @@ mb_init(void)
 	CPINFO	cpinfo;
 
 	/* Get info on this codepage to find out what it is. */
-	if (GetCPInfo(atoi(p_enc + 2), &cpinfo) != 0)
+	if (GetCPInfo(atoi((char *)p_enc + 2), &cpinfo) != 0)
 	{
 	    if (cpinfo.MaxCharSize == 1)
 	    {
@@ -547,7 +551,7 @@ mb_init(void)
 		    && (cpinfo.LeadByte[0] != 0 || cpinfo.LeadByte[1] != 0))
 	    {
 		/* must be a DBCS encoding, check below */
-		enc_dbcs_new = atoi(p_enc + 2);
+		enc_dbcs_new = atoi((char *)p_enc + 2);
 	    }
 	    else
 		goto codepage_invalid;
@@ -571,7 +575,7 @@ codepage_invalid:
 #ifdef WIN3264
 	/* Windows: accept only valid codepage numbers, check below. */
 	if (p_enc[6] != 'c' || p_enc[7] != 'p'
-				      || (enc_dbcs_new = atoi(p_enc + 8)) == 0)
+			      || (enc_dbcs_new = atoi((char *)p_enc + 8)) == 0)
 	    return e_invarg;
 #else
 	/* Unix: accept any "2byte-" name, assume current locale. */
@@ -4338,7 +4342,7 @@ get_iconv_import_func(HINSTANCE hInst, const char *funcname)
 		continue;
 	    pImpName = (PIMAGE_IMPORT_BY_NAME)(pImage
 					+ (UINT_PTR)(pINT->u1.AddressOfData));
-	    if (strcmp(pImpName->Name, funcname) == 0)
+	    if (strcmp((char *)pImpName->Name, funcname) == 0)
 		return (void *)pIAT->u1.Function;
 	}
     }
@@ -4941,7 +4945,11 @@ xim_init(void)
 #endif
 
     g_return_if_fail(gui.drawarea != NULL);
+#if GTK_CHECK_VERSION(3,0,0)
+    g_return_if_fail(gtk_widget_get_window(gui.drawarea) != NULL);
+#else
     g_return_if_fail(gui.drawarea->window != NULL);
+#endif
 
     xic = gtk_im_multicontext_new();
     g_object_ref(xic);
@@ -4955,7 +4963,11 @@ xim_init(void)
     g_signal_connect(G_OBJECT(xic), "preedit_end",
 		     G_CALLBACK(&im_preedit_end_cb), NULL);
 
+#if GTK_CHECK_VERSION(3,0,0)
+    gtk_im_context_set_client_window(xic, gtk_widget_get_window(gui.drawarea));
+#else
     gtk_im_context_set_client_window(xic, gui.drawarea->window);
+#endif
 }
 
     void
@@ -5054,12 +5066,21 @@ im_synthesize_keypress(unsigned int keyval, unsigned int state)
 
 #  ifdef HAVE_GTK_MULTIHEAD
     event = (GdkEventKey *)gdk_event_new(GDK_KEY_PRESS);
+#   if GTK_CHECK_VERSION(3,0,0)
+    g_object_ref(gtk_widget_get_window(gui.drawarea));
+					/* unreffed by gdk_event_free() */
+#   else
     g_object_ref(gui.drawarea->window); /* unreffed by gdk_event_free() */
+#   endif
 #  else
     event = (GdkEventKey *)g_malloc0((gulong)sizeof(GdkEvent));
     event->type = GDK_KEY_PRESS;
 #  endif
+#  if GTK_CHECK_VERSION(3,0,0)
+    event->window = gtk_widget_get_window(gui.drawarea);
+#  else
     event->window = gui.drawarea->window;
+#  endif
     event->send_event = TRUE;
     event->time = GDK_CURRENT_TIME;
     event->state  = state;
@@ -6005,7 +6026,7 @@ convert_setup_ext(
 }
 
 #if defined(FEAT_GUI) || defined(AMIGA) || defined(WIN3264) \
-	|| defined(MSDOS) || defined(PROTO)
+	|| defined(PROTO)
 /*
  * Do conversion on typed input characters in-place.
  * The input and output are not NUL terminated!
@@ -6268,7 +6289,7 @@ string_convert_ext(
 	    {
 		tmp_len = MultiByteToWideChar(vcp->vc_cpfrom,
 					unconvlenp ? MB_ERR_INVALID_CHARS : 0,
-					ptr, len, 0, 0);
+					(char *)ptr, len, 0, 0);
 		if (tmp_len == 0
 			&& GetLastError() == ERROR_NO_UNICODE_TRANSLATION)
 		{
@@ -6288,7 +6309,8 @@ string_convert_ext(
 	    if (vcp->vc_cpfrom == 0)
 		utf8_to_utf16(ptr, len, tmp, unconvlenp);
 	    else
-		MultiByteToWideChar(vcp->vc_cpfrom, 0, ptr, len, tmp, tmp_len);
+		MultiByteToWideChar(vcp->vc_cpfrom, 0,
+			(char *)ptr, len, tmp, tmp_len);
 
 	    /* 2. ucs-2  ->  codepage/UTF-8. */
 	    if (vcp->vc_cpto == 0)
@@ -6303,7 +6325,8 @@ string_convert_ext(
 		    utf16_to_utf8(tmp, tmp_len, retval);
 		else
 		    WideCharToMultiByte(vcp->vc_cpto, 0,
-					  tmp, tmp_len, retval, retlen, 0, 0);
+					  tmp, tmp_len,
+					  (char *)retval, retlen, 0, 0);
 		retval[retlen] = NUL;
 		if (lenp != NULL)
 		    *lenp = retlen;

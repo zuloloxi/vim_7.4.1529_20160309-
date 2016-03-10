@@ -51,6 +51,15 @@
 # undef F_BLANK
 #endif
 
+#ifdef HAVE_STRFTIME
+# undef HAVE_STRFTIME
+#endif
+#ifdef HAVE_STRING_H
+# undef HAVE_STRING_H
+#endif
+#ifdef HAVE_PUTENV
+# undef HAVE_PUTENV
+#endif
 #ifdef HAVE_STDARG_H
 # undef HAVE_STDARG_H   /* Python's config.h defines it as well. */
 #endif
@@ -1654,6 +1663,7 @@ do_py3eval (char_u *str, typval_T *rettv)
 	case VAR_FLOAT:
 	case VAR_SPECIAL:
 	case VAR_JOB:
+	case VAR_CHANNEL:
 	    break;
     }
 }

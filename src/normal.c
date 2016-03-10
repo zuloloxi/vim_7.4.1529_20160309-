@@ -163,9 +163,6 @@ static void	nv_halfpage(cmdarg_T *cap);
 static void	nv_join(cmdarg_T *cap);
 static void	nv_put(cmdarg_T *cap);
 static void	nv_open(cmdarg_T *cap);
-#ifdef FEAT_SNIFF
-static void	nv_sniff(cmdarg_T *cap);
-#endif
 #ifdef FEAT_NETBEANS_INTG
 static void	nv_nbcmd(cmdarg_T *cap);
 #endif
@@ -420,9 +417,6 @@ static const struct nv_cmd
     {K_F8,	farsi_fkey,	0,			0},
     {K_F9,	farsi_fkey,	0,			0},
 #endif
-#ifdef FEAT_SNIFF
-    {K_SNIFF,	nv_sniff,	0,			0},
-#endif
 #ifdef FEAT_NETBEANS_INTG
     {K_F21,	nv_nbcmd,	NV_NCH_ALW,		0},
 #endif
@@ -569,10 +563,6 @@ normal_cmd(
      * "3d" we return from normal_cmd() and come back here, the "3" is
      * remembered in "opcount". */
     ca.opcount = opcount;
-
-#ifdef FEAT_SNIFF
-    want_sniff_request = sniff_connected;
-#endif
 
     /*
      * If there is an operator pending, then the command we take this time
@@ -9223,13 +9213,20 @@ nv_join(cmdarg_T *cap)
 	    cap->count0 = 2;	    /* default for join is two lines! */
 	if (curwin->w_cursor.lnum + cap->count0 - 1 >
 						   curbuf->b_ml.ml_line_count)
-	    clearopbeep(cap->oap);  /* beyond last line */
-	else
 	{
-	    prep_redo(cap->oap->regname, cap->count0,
-			 NUL, cap->cmdchar, NUL, NUL, cap->nchar);
-	    (void)do_join(cap->count0, cap->nchar == NUL, TRUE, TRUE, TRUE);
+	    /* can't join when on the last line */
+	    if (cap->count0 <= 2)
+	    {
+		clearopbeep(cap->oap);
+		return;
+	    }
+	    cap->count0 = curbuf->b_ml.ml_line_count
+						  - curwin->w_cursor.lnum + 1;
 	}
+
+	prep_redo(cap->oap->regname, cap->count0,
+				     NUL, cap->cmdchar, NUL, NUL, cap->nchar);
+	(void)do_join(cap->count0, cap->nchar == NUL, TRUE, TRUE, TRUE);
     }
 }
 
@@ -9387,14 +9384,6 @@ nv_open(cmdarg_T *cap)
     else
 	n_opencmd(cap);
 }
-
-#ifdef FEAT_SNIFF
-    static void
-nv_sniff(cmdarg_T *cap UNUSED)
-{
-    ProcessSniffRequests();
-}
-#endif
 
 #ifdef FEAT_NETBEANS_INTG
     static void
